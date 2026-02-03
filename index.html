@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stroke Studio">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a2e">
+<title>Stroke Animation Studio</title>
+<script>
+// PWA: アイコン生成 → マニフェスト → Service Worker（すべてインライン）
+(function(){
+  function makeIcon(sz,bg,fg){
+    const c=document.createElement('canvas');c.width=sz;c.height=sz;
+    const x=c.getContext('2d');
+    // 背景
+    x.fillStyle=bg;x.beginPath();x.roundRect(0,0,sz,sz,sz*0.18);x.fill();
+    // ペンアイコン
+    const m=sz*0.15;const s=sz-m*2;
+    x.save();x.translate(m+s*0.5,m+s*0.5);x.rotate(-Math.PI/4);x.translate(-s*0.12,-s*0.4);
+    // ペン軸
+    x.fillStyle=fg;x.fillRect(-s*0.06,0,s*0.12,s*0.55);
+    // ペン先
+    x.beginPath();x.moveTo(-s*0.06,s*0.55);x.lineTo(s*0.06,s*0.55);x.lineTo(0,s*0.72);x.closePath();x.fill();
+    // 星マーク
+    x.restore();
+    x.fillStyle='#e94560';x.font=`bold ${sz*0.22}px sans-serif`;x.textAlign='right';x.textBaseline='top';
+    x.fillText('✦',sz-m*0.6,m*0.4);
+    return c.toDataURL('image/png');
+  }
+  const icon192=makeIcon(192,'#1a1a2e','#eaeaea');
+  const icon512=makeIcon(512,'#1a1a2e','#eaeaea');
+
+  // apple-touch-icon
+  const al=document.createElement('link');al.rel='apple-touch-icon';al.href=icon192;document.head.appendChild(al);
+
+  // マニフェスト
+  const manifest={
+    name:'Stroke Animation Studio',short_name:'Stroke Studio',
+    start_url:'./',display:'standalone',orientation:'landscape',
+    background_color:'#1a1a2e',theme_color:'#1a1a2e',
+    icons:[
+      {src:icon192,sizes:'192x192',type:'image/png'},
+      {src:icon512,sizes:'512x512',type:'image/png',purpose:'any maskable'}
+    ]
+  };
+  const mb=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+  const ml=document.createElement('link');ml.rel='manifest';ml.href=URL.createObjectURL(mb);document.head.appendChild(ml);
+
+  // Service Worker
+  const swCode=`
+    const CACHE='sas-v1';
+    self.addEventListener('install',e=>{self.skipWaiting();});
+    self.addEventListener('activate',e=>{e.waitUntil(clients.claim());});
+    self.addEventListener('fetch',e=>{
+      e.respondWith(
+        caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
+          if(res.ok&&e.request.method==='GET'){
+            const c=res.clone();
+            caches.open(CACHE).then(cache=>cache.put(e.request,c));
+          }
+          return res;
+        }).catch(()=>caches.match(e.request)))
+      );
+    });
+  `;
+  const swb=new Blob([swCode],{type:'application/javascript'});
+  const swUrl=URL.createObjectURL(swb);
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register(swUrl,{scope:'./'}).catch(()=>{});
+  }
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --bg-primary:#1a1a2e;--bg-secondary:#16213e;--bg-tertiary:#0f3460;
+  --bg-panel:#1c1c3a;--bg-input:#252547;
+  --accent:#e94560;--accent-hover:#ff6b81;
+  --text-primary:#eaeaea;--text-secondary:#a0a0c0;--text-muted:#6a6a8a;
+  --border:#2a2a4a;--border-light:#3a3a5a;
+  --success:#4ecdc4;--warning:#f9a825;
+  --layer-color-1:#e94560;--layer-color-2:#4ecdc4;
+  --layer-color-3:#f9a825;--layer-color-4:#a855f7;
+  --draft-color-1:#555580;--draft-color-2:#555580;--draft-color-3:#555580;--draft-color-4:#555580;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);color:var(--text-primary);overflow:hidden;height:100vh;user-select:none;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg-primary);}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
+
+#header{display:flex;align-items:center;height:36px;background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:0 10px;gap:5px;}
+#header .app-title{font-size:13px;font-weight:700;color:var(--accent);margin-right:12px;}
+.header-btn{background:transparent;border:1px solid var(--border);color:var(--text-secondary);padding:3px 10px;font-size:11px;border-radius:3px;cursor:pointer;white-space:nowrap;}
+.header-btn:hover{background:var(--bg-tertiary);color:var(--text-primary);}
+.header-sep{width:1px;height:20px;background:var(--border);margin:0 3px;}
+#project-name-input{background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:3px 8px;font-size:11px;border-radius:3px;width:140px;}
+#project-name-input::placeholder{color:var(--text-muted);}
+
+#main-layout{display:flex;height:calc(100vh - 36px);}
+
+#toolbar{width:44px;background:var(--bg-secondary);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px;}
+.tool-btn{width:34px;height:34px;background:transparent;border:none;border-radius:4px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
+.tool-btn:hover{background:var(--bg-input);color:var(--text-primary);}
+.tool-btn.active{background:var(--accent);color:#fff;}
+.tool-btn svg{width:18px;height:18px;}
+.tool-btn .shortcut{position:absolute;bottom:1px;right:2px;font-size:7px;color:var(--text-muted);pointer-events:none;}
+.tool-btn.active .shortcut{color:rgba(255,255,255,0.6);}
+.tool-sep{width:28px;height:1px;background:var(--border);margin:4px 0;}
+#pen-settings{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+#stroke-point-settings{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+#stroke-point-settings label{font-size:9px;color:var(--text-muted);}
+#stroke-point-val{font-size:10px;color:var(--text-secondary);}
+#stroke-point-slider{width:30px;writing-mode:vertical-lr;direction:rtl;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;height:80px;}
+#stroke-point-slider::-webkit-slider-runnable-track{width:4px;background:var(--border-light);border-radius:2px;}
+#stroke-point-slider::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--accent);border-radius:50%;margin-left:-4px;}
+#pen-settings label{font-size:9px;color:var(--text-muted);}
+#pen-size-val{font-size:10px;color:var(--text-secondary);}
+#pen-smooth-val{font-size:10px;color:var(--text-secondary);}
+#pen-size{width:30px;writing-mode:vertical-lr;direction:rtl;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;height:80px;}
+#pen-smooth{width:30px;writing-mode:vertical-lr;direction:rtl;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;height:60px;}
+#pen-size::-webkit-slider-runnable-track{width:4px;background:var(--border-light);border-radius:2px;}
+#pen-smooth::-webkit-slider-runnable-track{width:4px;background:var(--border-light);border-radius:2px;}
+#pen-size::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--accent);border-radius:50%;margin-left:-4px;}
+#pen-smooth::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--accent);border-radius:50%;margin-left:-4px;}
+#pen-color{width:28px;height:28px;border:2px solid var(--border-light);border-radius:4px;cursor:pointer;background:#000;padding:0;}
+#pen-color::-webkit-color-swatch-wrapper{padding:0;}
+#pen-color::-webkit-color-swatch{border:none;border-radius:2px;}
+
+#canvas-area{flex:1;position:relative;overflow:hidden;background:#111128;cursor:crosshair;touch-action:none;}
+#canvas-container{position:absolute;transform-origin:0 0;}
+.canvas-layer{position:absolute;top:0;left:0;}
+#canvas-bg{position:absolute;top:0;left:0;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.5);}
+#onion-canvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0.3;}
+#stroke-guide-canvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
+#cursor-preview{position:fixed;pointer-events:none;border:1.5px solid rgba(233,69,96,0.7);border-radius:50%;z-index:100;display:none;}
+#rotation-indicator{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:var(--text-primary);padding:4px 12px;border-radius:4px;font-size:12px;display:none;z-index:50;}
+#zoom-indicator{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:var(--text-primary);padding:4px 12px;border-radius:4px;font-size:11px;z-index:50;}
+#stroke-order-overlay{position:absolute;top:0;left:0;pointer-events:none;z-index:10;}
+#point-edit-overlay{position:absolute;top:0;left:0;pointer-events:none;z-index:6;}
+#frame-guide-overlay{position:absolute;pointer-events:none;z-index:8;border:2px solid rgba(0,180,255,0.7);box-sizing:border-box;display:none;box-shadow:0 0 0 9999px rgba(0,0,0,0.25);}
+
+#right-panel{width:220px;background:var(--bg-panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+.panel-section{border-bottom:1px solid var(--border);}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-secondary);font-size:11px;font-weight:600;color:var(--text-secondary);}
+.panel-body{padding:8px;}
+.layer-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:2px;}
+.layer-item:hover{background:var(--bg-input);}
+.layer-item.active{background:var(--bg-tertiary);outline:1px solid var(--accent);}
+.layer-color-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.layer-vis-btn{width:20px;height:20px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;border-radius:3px;}
+.layer-vis-btn:hover{background:var(--bg-input);color:var(--text-primary);}
+.layer-vis-btn.hidden{opacity:0.3;}
+.layer-actions{display:flex;gap:4px;padding:4px 6px;}
+.layer-action-btn{flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text-secondary);padding:3px;font-size:10px;border-radius:3px;cursor:pointer;}
+.layer-action-btn:hover{background:var(--bg-tertiary);color:var(--text-primary);}
+.onion-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:4px;}
+.onion-row label{flex:1;}
+.onion-row input[type="checkbox"]{accent-color:var(--accent);}
+.onion-row input[type="number"]{width:50px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;font-size:10px;border-radius:3px;text-align:center;}
+
+.cut-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:2px;}
+.cut-item:hover{background:var(--bg-input);}
+.cut-item.active{background:var(--bg-tertiary);outline:1px solid var(--accent);}
+.cut-item .cut-label{flex:1;font-weight:600;}
+.cut-item .cut-frames{font-size:9px;color:var(--text-muted);}
+.cut-actions{display:flex;gap:4px;padding:4px 6px;}
+
+#timeline-panel{position:fixed;bottom:0;left:44px;right:220px;height:180px;background:var(--bg-panel);border-top:1px solid var(--border);display:flex;flex-direction:column;z-index:20;}
+#timeline-controls{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg-secondary);border-bottom:1px solid var(--border);height:32px;}
+.tl-btn{width:26px;height:26px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-secondary);border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;}
+.tl-btn:hover{background:var(--bg-tertiary);color:var(--text-primary);}
+.tl-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.tl-info{font-size:11px;color:var(--text-secondary);margin-left:6px;}
+.tl-info span{color:var(--text-primary);font-weight:600;}
+#fps-input{width:36px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;font-size:11px;border-radius:3px;text-align:center;}
+#timeline-body{flex:1;display:flex;overflow:hidden;}
+#tl-layer-labels{width:100px;background:var(--bg-secondary);border-right:1px solid var(--border);overflow-y:auto;}
+.tl-layer-label{height:24px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-secondary);border-bottom:1px solid var(--border);cursor:pointer;}
+.tl-layer-label.active{color:var(--text-primary);background:var(--bg-tertiary);}
+.tl-layer-label .dot{width:6px;height:6px;border-radius:50%;margin-right:6px;flex-shrink:0;}
+#tl-frames-area{flex:1;overflow-x:auto;overflow-y:auto;position:relative;}
+#tl-header{position:sticky;top:0;height:18px;background:var(--bg-secondary);border-bottom:1px solid var(--border);z-index:2;display:flex;}
+.tl-frame-num{width:28px;min-width:28px;height:18px;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-muted);border-right:1px solid var(--border);cursor:pointer;}
+.tl-frame-num.current{background:var(--accent);color:#fff;}
+#tl-rows{position:relative;}
+.tl-row{height:24px;display:flex;border-bottom:1px solid var(--border);}
+.tl-cell{width:28px;min-width:28px;height:24px;border-right:1px solid rgba(42,42,74,0.5);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
+.tl-cell:hover{background:rgba(233,69,96,0.1);}
+.tl-cell.has-data{background:rgba(78,205,196,0.15);}
+.tl-cell.has-data::after{content:'';width:8px;height:8px;background:var(--success);border-radius:50%;}
+.tl-cell.current-frame{background:rgba(233,69,96,0.15);}
+.tl-cell.hold-frame{background:rgba(249,168,37,0.08);}
+.tl-cell.hold-frame::after{content:'';width:14px;height:3px;background:var(--warning);border-radius:2px;opacity:0.5;}
+.tl-cell.hold-start{background:rgba(249,168,37,0.2);}
+.tl-cell.hold-start::after{content:'';width:8px;height:8px;background:var(--warning);border-radius:50%;}
+.tl-cell.tl-selected{outline:2px solid var(--accent);outline-offset:-2px;z-index:1;}
+.tl-cell.tl-drag-ghost{background:rgba(233,69,96,0.25);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1;}
+
+/* コンテキストメニュー */
+#ctx-menu{display:none;position:fixed;background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;padding:4px 0;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,0.6);min-width:160px;}
+.ctx-item{padding:6px 14px;font-size:11px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:8px;}
+.ctx-item:hover{background:var(--bg-tertiary);color:var(--text-primary);}
+.ctx-item.disabled{opacity:0.35;pointer-events:none;}
+.ctx-sep{height:1px;background:var(--border);margin:3px 8px;}
+.ctx-item .ctx-shortcut{margin-left:auto;font-size:9px;color:var(--text-muted);}
+
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal-box{background:var(--bg-panel);border:1px solid var(--border-light);border-radius:8px;padding:20px;min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.modal-box h3{font-size:14px;margin-bottom:12px;color:var(--accent);}
+.modal-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.modal-row label{font-size:12px;color:var(--text-secondary);width:70px;}
+.modal-row input,.modal-row select{flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:5px 8px;font-size:12px;border-radius:4px;}
+.modal-buttons{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+.modal-btn{padding:5px 16px;font-size:12px;border-radius:4px;border:1px solid var(--border);cursor:pointer;}
+.modal-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.modal-btn.secondary{background:var(--bg-input);color:var(--text-secondary);}
+.modal-btn:hover{opacity:0.85;}
+#inbetween-preview{width:100%;height:150px;background:#fff;border:1px solid var(--border);border-radius:4px;margin:8px 0;}
+#notification{position:fixed;top:50px;right:20px;background:var(--bg-secondary);border:1px solid var(--success);color:var(--text-primary);padding:8px 16px;border-radius:6px;font-size:12px;z-index:999;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.4);}
+#export-progress{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-panel);border:1px solid var(--border-light);border-radius:8px;padding:24px;z-index:600;display:none;text-align:center;min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.6);}
+#export-progress h4{font-size:13px;color:var(--accent);margin-bottom:10px;}
+#export-progress-bar{width:100%;height:6px;background:var(--bg-input);border-radius:3px;overflow:hidden;margin-bottom:8px;}
+#export-progress-fill{height:100%;background:var(--accent);width:0%;transition:width 0.2s;}
+#export-progress-text{font-size:11px;color:var(--text-secondary);}
+
+/* モバイル/タブレット対応 */
+@media(max-width:900px){
+  #app{flex-direction:column;}
+  #main-area{flex-direction:column;}
+  #toolbar{flex-direction:row;width:100%;height:40px;overflow-x:auto;overflow-y:hidden;}
+  #right-panel{width:100%;max-height:200px;overflow-y:auto;flex-direction:row;flex-wrap:wrap;}
+  #right-panel .panel-section{min-width:180px;flex:1;}
+  #timeline-panel{left:0;right:0;height:140px;}
+  #canvas-area{min-height:300px;}
+  #header{flex-wrap:wrap;height:auto;padding:4px 8px;}
+  .header-btn{padding:4px 8px;font-size:10px;}
+  .tool-btn{width:34px;height:34px;min-width:34px;font-size:14px;}
+}
+@media(max-width:600px){
+  #right-panel{max-height:160px;}
+  #timeline-panel{height:120px;}
+  .tl-cell{width:22px;min-width:22px;height:20px;}
+  .tl-frame-num{width:22px;min-width:22px;}
+}
+/* タッチデバイスでホバー無効 */
+@media(hover:none){
+  .tl-cell:hover{background:none;}
+  .tool-btn:hover{background:none;}
+  .header-btn:hover{background:none;}
+}
+</style>
+</head>
+<body>
+<div id="header">
+  <span class="app-title">✦ Stroke Animation Studio</span>
+  <input type="text" id="project-name-input" placeholder="プロジェクト名" value="untitled">
+  <div class="header-sep"></div>
+  <button class="header-btn" onclick="newProject()">新規</button>
+  <button class="header-btn" onclick="saveProject()">💾 保存</button>
+  <button class="header-btn" onclick="loadProject()">📂 開く</button>
+  <div class="header-sep"></div>
+  <button class="header-btn" onclick="showCanvasSizeDialog()">キャンバスサイズ</button>
+  <button class="header-btn" onclick="importDraftImage()">下書き読込</button>
+  <div class="header-sep"></div>
+  <button class="header-btn" onclick="undoAction()">↩ 戻す</button>
+  <button class="header-btn" onclick="redoAction()">↪ やり直し</button>
+  <div class="header-sep"></div>
+  <button class="header-btn" onclick="exportAllPNG()">📦 連番PNG出力</button>
+</div>
+
+<div id="main-layout">
+  <div id="toolbar">
+    <button class="tool-btn active" data-tool="pen" title="ペン (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span class="shortcut">P</span></button>
+    <button class="tool-btn" data-tool="line" title="直線 (L)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="shortcut">L</span></button>
+    <button class="tool-btn" data-tool="circle" title="円形 (C)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg><span class="shortcut">C</span></button>
+    <button class="tool-btn" data-tool="rect" title="四角形 (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/></svg><span class="shortcut">R</span></button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" data-tool="eraser" title="消しゴム (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l8-8 9 9-4 3z"/><path d="M6.5 13.5l5-5"/></svg><span class="shortcut">E</span></button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" data-tool="point" title="ポイント編集 (A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg><span class="shortcut">A</span></button>
+    <button class="tool-btn" data-tool="stroke" title="ストローク編集 (S)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2"/><path d="M7 12h10M12 7v10"/></svg><span class="shortcut">S</span></button>
+    <button class="tool-btn" data-tool="move" title="全体移動 (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg><span class="shortcut">V</span></button>
+    <div class="tool-sep"></div>
+    <div id="pen-settings">
+      <label>サイズ</label><span id="pen-size-val">2</span>
+      <input type="range" id="pen-size" min="1" max="30" value="2">
+      <label>補正</label><span id="pen-smooth-val">50</span>
+      <input type="range" id="pen-smooth" min="0" max="100" value="50">
+      <label>色</label><input type="color" id="pen-color" value="#000000">
+    </div>
+    <div id="stroke-point-settings" style="display:none;">
+      <label>ポイント数</label><span id="stroke-point-val">-</span>
+      <input type="range" id="stroke-point-slider" min="2" max="100" value="10">
+    </div>
+  </div>
+
+  <div id="canvas-area">
+    <div id="canvas-container">
+      <div id="canvas-bg"></div>
+      <canvas id="onion-canvas" class="canvas-layer"></canvas>
+      <canvas id="stroke-guide-canvas" class="canvas-layer"></canvas>
+      <canvas id="point-edit-overlay" class="canvas-layer"></canvas>
+      <div id="frame-guide-overlay"></div>
+    </div>
+    <canvas id="stroke-order-overlay"></canvas>
+    <div id="rotation-indicator"></div>
+    <div id="zoom-indicator">100%</div>
+    <div id="cursor-preview"></div>
+  </div>
+
+  <div id="right-panel">
+    <div class="panel-section">
+      <div class="panel-header">カット管理</div>
+      <div class="panel-body" id="cut-list" style="max-height:108px;overflow-y:auto;"></div>
+      <div class="cut-actions"><button class="layer-action-btn" onclick="addCut()">追加</button><button class="layer-action-btn" onclick="removeCut()">削除</button></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">レイヤー</div>
+      <div class="panel-body" id="layer-list"></div>
+      <div class="layer-actions"><button class="layer-action-btn" onclick="clearCurrentLayer()">クリア</button><button class="layer-action-btn" onclick="duplicateFrame()">複製</button></div>
+      <div class="onion-row" style="margin-top:4px;"><label>下書き不透明度</label><input type="range" id="draft-opacity" min="0" max="100" value="40" style="width:60px;" oninput="draftOpacity=this.value/100;document.getElementById('draft-opacity-val').textContent=this.value+'%';renderAll();"><span id="draft-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">40%</span></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">オニオンスキン</div>
+      <div class="panel-body">
+        <div class="onion-row"><label>有効</label><input type="checkbox" id="onion-enabled" checked onchange="renderAll()"></div>
+        <div class="onion-row"><label>前フレーム数</label><input type="number" id="onion-prev" value="1" min="0" max="5" onchange="renderAll()"></div>
+        <div class="onion-row"><label>次フレーム数</label><input type="number" id="onion-next" value="1" min="0" max="5" onchange="renderAll()"></div>
+        <div class="onion-row"><label>書き順ガイド</label><input type="checkbox" id="stroke-guide-enabled" onchange="renderAll()"></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">プロジェクト情報</div>
+      <div class="panel-body">
+        <div class="onion-row"><label>幅</label><input type="number" id="info-width" value="2600" min="1" max="8192" onchange="applyProjectInfo()"></div>
+        <div class="onion-row"><label>高さ</label><input type="number" id="info-height" value="1500" min="1" max="8192" onchange="applyProjectInfo()"></div>
+        <div class="onion-row"><label>フレーム数</label><input type="number" id="info-frames" value="24" min="1" max="9999" onchange="applyProjectInfoFrames()"></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">枠ガイド</div>
+      <div class="panel-body">
+        <div class="onion-row"><label>表示</label><input type="checkbox" id="frame-guide-enabled" checked onchange="updateFrameGuide()"></div>
+        <div class="onion-row"><label>幅</label><input type="number" id="frame-guide-w" value="1920" min="1" max="8192" onchange="updateFrameGuide()"></div>
+        <div class="onion-row"><label>高さ</label><input type="number" id="frame-guide-h" value="1080" min="1" max="8192" onchange="updateFrameGuide()"></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">操作ヘルプ</div>
+      <div class="panel-body" style="font-size:10px;color:var(--text-muted);line-height:1.6;">
+        Ctrl+Space+ドラッグ: 回転<br>ホイール: 拡大縮小<br>Space+ドラッグ: パン<br>
+        Ctrl+Z/Y: 元に戻す/やり直し<br>Ctrl+S: 保存<br>→/←: フレーム移動<br>
+        右クリック: コピー/ペースト/持続設定<br>Esc: 回転リセット/選択解除<br>
+        A: ポイント編集（通過点の移動）<br>S: ストローク編集（選択して移動/拡縮/回転）<br>V: 全体移動<br>
+        タイムライン: ドラッグでキーフレーム移動<br>Shift+クリック: 複数選択<br>Del: 選択クリア
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="timeline-panel">
+  <div id="timeline-controls">
+    <button class="tl-btn" onclick="goFirstFrame()" title="最初">⏮</button>
+    <button class="tl-btn" onclick="goPrevFrame()" title="前">◀</button>
+    <button class="tl-btn" id="play-btn" onclick="togglePlay()" title="再生/停止">▶</button>
+    <button class="tl-btn" onclick="goNextFrame()" title="次">▶</button>
+    <button class="tl-btn" onclick="goLastFrame()" title="最後">⏭</button>
+    <div class="header-sep"></div>
+    <button class="tl-btn" onclick="addFrame()" title="フレーム追加">＋</button>
+    <button class="tl-btn" onclick="removeFrame()" title="フレーム削除">－</button>
+    <button class="tl-btn" onclick="insertKeyframe()" title="キーフレーム挿入">◆</button>
+    <div class="header-sep"></div>
+    <span class="tl-info">フレーム: <span id="current-frame-display">1</span>/<span id="total-frame-display">24</span></span>
+    <div class="header-sep"></div>
+    <span class="tl-info">FPS:</span><input type="number" id="fps-input" value="12" min="1" max="60" onchange="updateFPS()">
+    <div class="header-sep"></div>
+    <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
+    <div class="header-sep"></div>
+    <button class="tl-btn" onclick="toggleOnionSkin()" title="オニオンスキン" style="font-size:10px;">🧅</button>
+    <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
+    <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
+  </div>
+  <div id="timeline-body">
+    <div id="tl-layer-labels"></div>
+    <div id="tl-frames-area"><div id="tl-header"></div><div id="tl-rows"></div></div>
+  </div>
+</div>
+
+<!-- コンテキストメニュー -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxCopyFrame()">📋 フレームをコピー<span class="ctx-shortcut">Ctrl+C</span></div>
+  <div class="ctx-item" id="ctx-paste" onclick="ctxPasteFrame()">📌 フレームを貼り付け<span class="ctx-shortcut">Ctrl+V</span></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxCopyAllLayers()">📋 全レイヤーコピー</div>
+  <div class="ctx-item" id="ctx-paste-all" onclick="ctxPasteAllLayers()">📌 全レイヤー貼り付け</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxClearFrame()">🗑️ フレームをクリア</div>
+  <div class="ctx-item" onclick="ctxInsertFrame()">◆ キーフレーム挿入</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxSetDuration()">⏱️ 持続フレーム設定...</div>
+</div>
+
+<div class="modal-overlay" id="canvas-size-modal">
+  <div class="modal-box"><h3>キャンバスサイズ</h3>
+    <div class="modal-row"><label>幅:</label><input type="number" id="canvas-w-input" value="2600" min="1" max="8192"></div>
+    <div class="modal-row"><label>高さ:</label><input type="number" id="canvas-h-input" value="1500" min="1" max="8192"></div>
+    <div class="modal-buttons"><button class="modal-btn secondary" onclick="closeModal('canvas-size-modal')">キャンセル</button><button class="modal-btn primary" onclick="applyCanvasSize()">適用</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="inbetween-dialog">
+  <div class="modal-box" style="min-width:360px;"><h3>🎬 自動中割生成</h3>
+    <div class="modal-row"><label>開始フレーム:</label><input type="number" id="inb-start" value="1" min="1"></div>
+    <div class="modal-row"><label>終了フレーム:</label><input type="number" id="inb-end" value="2" min="1"></div>
+    <div class="modal-row"><label>挿入枚数:</label><input type="number" id="inb-count" value="3" min="1" max="30"></div>
+    <div class="modal-row"><label>イージング:</label><select id="inb-easing"><option value="linear">リニア</option><option value="easeIn">イーズイン</option><option value="easeOut">イーズアウト</option><option value="easeInOut">イーズインアウト</option></select></div>
+    <canvas id="inbetween-preview"></canvas>
+    <div class="modal-buttons"><button class="modal-btn secondary" onclick="closeModal('inbetween-dialog')">キャンセル</button><button class="modal-btn primary" onclick="generateInbetweens()">生成</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="duration-modal">
+  <div class="modal-box" style="min-width:240px;"><h3>⏱️ 持続フレーム設定</h3>
+    <div class="modal-row"><label>フレーム数:</label><input type="number" id="dur-modal-input" value="1" min="1" max="100"></div>
+    <div class="modal-buttons"><button class="modal-btn secondary" onclick="closeModal('duration-modal')">キャンセル</button><button class="modal-btn primary" onclick="applyDurModal()">適用</button></div>
+  </div>
+</div>
+
+<div id="export-progress"><h4>📦 連番PNG書き出し中...</h4><div id="export-progress-bar"><div id="export-progress-fill"></div></div><div id="export-progress-text">0 / 0</div></div>
+<div id="notification"></div>
+<input type="file" id="file-input-project" accept=".json,.sasp" style="display:none" onchange="handleLoadProject(event)">
+<input type="file" id="file-input-draft" accept="image/*" style="display:none" onchange="handleDraftImage(event)">
+
+<script>
+const LAYER_DEFS=[
+  {id:'draw1',name:'線画1',color:'var(--layer-color-1)',type:'draw'},
+  {id:'draw2',name:'線画2',color:'var(--layer-color-2)',type:'draw'},
+  {id:'draw3',name:'線画3',color:'var(--layer-color-3)',type:'draw'},
+  {id:'draw4',name:'線画4',color:'var(--layer-color-4)',type:'draw'},
+  {id:'draft1',name:'下書き1',color:'var(--draft-color-1)',type:'draft'},
+  {id:'draft2',name:'下書き2',color:'var(--draft-color-2)',type:'draft'},
+  {id:'draft3',name:'下書き3',color:'var(--draft-color-3)',type:'draft'},
+  {id:'draft4',name:'下書き4',color:'var(--draft-color-4)',type:'draft'},
+];
+
+let cuts=[];let currentCut=0;
+let S={cw:2600,ch:1500,fps:12,frame:0,layer:0,tool:'pen',penSize:2,penColor:'#000000',penSmooth:50,zoom:1,rot:0,panX:0,panY:0,playing:false,playTimer:null};
+let layerVis={};let undoStack=[],redoStack=[];const MAX_UNDO=50;
+let layerCanvases=[],layerCtxs=[];
+let onionCanvas,onionCtx,guideCanvas,guideCtx,overlayCanvas,overlayCtx;
+let drawing=false,panning=false,rotating=false;
+let curPoints=[],shapeStart=null,lastMouse={x:0,y:0};
+let drawingSnapshot=null; // 描画開始時のレイヤーcanvasスナップショット
+let spaceHeld=false,ctrlHeld=false;
+let draftImgCache={};let strokeGuideVisible=false;
+let draftOpacity=0.4; // 下書きレイヤー不透明度
+let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
+
+// クリップボード（フレームコピー用）
+let clipFrame=null;       // 単一レイヤー {strokes, draftImg}
+let clipAllFrames=null;   // 全レイヤー [{strokes, draftImg}, ...]
+// コンテキストメニュー対象
+let ctxLayer=-1,ctxFrame=-1;
+
+// ポイント編集ツール用
+let pointEditCanvas,pointEditCtx;
+let selectedStrokeIdx=-1;   // 選択中のストロークindex
+let dragPointInfo=null;     // {strokeIdx, type, idx, sub} ドラッグ中の制御点情報
+let selectedPointInfo=null; // 選択中のポイント情報（ハンドル表示用、mouseup後も保持）
+let POINT_RADIUS=5;         // 制御点の表示半径（canvas座標）
+
+// 移動ツール用
+let moveMode='all';         // 'all' | 'single'
+let moveDragging=false;
+let moveDragStart=null;     // {x, y}
+let moveTargetIdx=-1;       // single時のストロークindex
+
+// ストローク編集ツール用
+let strokeEditIdx=-1;       // 選択中ストロークindex
+let strokeEditMode='';      // '' | 'move' | 'scale' | 'rotate'
+let strokeEditStart=null;   // ドラッグ開始座標
+let strokeEditAnchor=null;  // 回転アンカー {x,y} クリック位置
+let strokeEditInitAngle=0;  // 初期角度（回転用）
+let strokeEditInitScale=1;  // 初期距離（拡縮用）
+// ボックス状態: 4頂点で管理（回転対応）
+let strokeEditCorners=null; // [tl,tr,br,bl] 各{x,y}
+let strokeEditCenter=null;  // {x,y} ボックス中心
+
+// タイムラインキーフレームドラッグ用
+let tlSelected=new Set();   // 選択中セル Set of 'li-fi' strings
+let tlDragging=false;
+let tlDragSource=null;      // {li,fi} ドラッグ開始セル
+let tlDragCurrent=null;     // 現在マウス下のフレームindex
+let tlDragOffset=0;         // ドラッグ開始位置からのオフセット
+
+function CC(){return cuts[currentCut];}
+function CF(){return CC().layers;}
+function CTF(){return CC().totalFrames;}
+function CFD(){return CC().frameDur;}
+
+// 持続フレーム対応：fi位置で実際に表示すべきフレームインデックスを返す
+// frameDur[li+'-'+f]がd(>=2)なら f～f+d-1 の範囲はfのデータを表示
+function getEffectiveFrameIdx(li,fi){
+  const dur=CFD();
+  for(let f=fi;f>=0;f--){
+    const d=dur[li+'-'+f]||1;
+    if(d>1&&fi>=f&&fi<=f+d-1)return f;
+  }
+  return fi;
+}
+function getEffectiveFrame(li,fi){
+  const eidx=getEffectiveFrameIdx(li,fi);
+  const frames=CF()[li].frames;
+  if(eidx<0||eidx>=frames.length)return null;
+  return frames[eidx];
+}
+
+// ===========================================================
+// 初期化
+// ===========================================================
+function init(){
+  cuts.push(createEmptyCut('C_001',24));
+  for(let i=0;i<LAYER_DEFS.length;i++)layerVis[i]=true;
+  createCanvases();updateCutList();updateLayerList();updateTimeline();updateTransform();
+  renderAll();setupEvents();centerCanvas();
+}
+function createEmptyCut(name,frames){
+  const c={name,totalFrames:frames,frameDur:{},layers:[]};
+  for(let i=0;i<LAYER_DEFS.length;i++){c.layers.push({frames:[]});for(let f=0;f<frames;f++)c.layers[i].frames.push({strokes:[],draftImg:null});}
+  return c;
+}
+function createCanvases(){
+  const ct=document.getElementById('canvas-container');layerCanvases.forEach(c=>c.remove());layerCanvases=[];layerCtxs=[];
+  const bg=document.getElementById('canvas-bg');bg.style.width=S.cw+'px';bg.style.height=S.ch+'px';
+  onionCanvas=document.getElementById('onion-canvas');onionCanvas.width=S.cw;onionCanvas.height=S.ch;onionCtx=onionCanvas.getContext('2d');
+  guideCanvas=document.getElementById('stroke-guide-canvas');guideCanvas.width=S.cw;guideCanvas.height=S.ch;guideCtx=guideCanvas.getContext('2d');
+  pointEditCanvas=document.getElementById('point-edit-overlay');pointEditCanvas.width=S.cw;pointEditCanvas.height=S.ch;pointEditCtx=pointEditCanvas.getContext('2d');
+  overlayCanvas=document.getElementById('stroke-order-overlay');overlayCanvas.width=S.cw;overlayCanvas.height=S.ch;overlayCtx=overlayCanvas.getContext('2d');
+  for(let i=0;i<LAYER_DEFS.length;i++){const c=document.createElement('canvas');c.className='canvas-layer';c.width=S.cw;c.height=S.ch;c.style.width=S.cw+'px';c.style.height=S.ch+'px';ct.appendChild(c);layerCanvases.push(c);const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;layerCtxs.push(ctx);}
+}
+function centerCanvas(){const a=document.getElementById('canvas-area').getBoundingClientRect();S.panX=(a.width-S.cw*S.zoom)/2;S.panY=(a.height-180-S.ch*S.zoom)/2;updateTransform();}
+function updateTransform(){document.getElementById('canvas-container').style.transform=`translate(${S.panX}px,${S.panY}px) rotate(${S.rot}deg) scale(${S.zoom})`;document.getElementById('zoom-indicator').textContent=Math.round(S.zoom*100)+'%';}
+
+// ===========================================================
+// イベント
+// ===========================================================
+function setupEvents(){
+  const area=document.getElementById('canvas-area');
+  area.addEventListener('mousedown',onDown);area.addEventListener('mousemove',onMove);area.addEventListener('mouseup',onUp);area.addEventListener('mouseleave',onUp);
+  area.addEventListener('wheel',onWheel,{passive:false});area.addEventListener('contextmenu',e=>e.preventDefault());
+  // タッチイベント → マウスイベント変換
+  let touchId=null;
+  area.addEventListener('touchstart',e=>{
+    if(touchId!==null)return;
+    const t=e.touches[0];touchId=t.identifier;
+    e.preventDefault();
+    onDown({clientX:t.clientX,clientY:t.clientY,button:0,preventDefault(){}});
+  },{passive:false});
+  area.addEventListener('touchmove',e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){e.preventDefault();onMove({clientX:t.clientX,clientY:t.clientY,preventDefault(){}});break;}
+    }
+  },{passive:false});
+  const touchEnd=e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){touchId=null;onUp({clientX:t.clientX,clientY:t.clientY,preventDefault(){}});break;}
+    }
+  };
+  area.addEventListener('touchend',touchEnd);area.addEventListener('touchcancel',touchEnd);
+  // 2本指ピンチ拡縮
+  let lastPinchDist=0;
+  area.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){
+      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+      lastPinchDist=Math.sqrt(dx*dx+dy*dy);
+    }
+  },{passive:true});
+  area.addEventListener('touchmove',e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(lastPinchDist>0){
+        const scale=dist/lastPinchDist;
+        S.zoom=Math.max(0.1,Math.min(10,S.zoom*scale));
+        updateTransform();
+      }
+      lastPinchDist=dist;
+    }
+  },{passive:false});
+  area.addEventListener('touchend',e=>{if(e.touches.length<2)lastPinchDist=0;},{passive:true});
+
+  document.addEventListener('keydown',onKeyDown);document.addEventListener('keyup',onKeyUp);
+  document.getElementById('pen-size').addEventListener('input',e=>{S.penSize=+e.target.value;document.getElementById('pen-size-val').textContent=S.penSize;});
+  document.getElementById('pen-smooth').addEventListener('input',e=>{S.penSmooth=+e.target.value;document.getElementById('pen-smooth-val').textContent=S.penSmooth;});
+  document.getElementById('pen-color').addEventListener('input',e=>{S.penColor=e.target.value;});
+  document.getElementById('stroke-point-slider').addEventListener('input',onStrokePointSliderInput);
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{b.addEventListener('click',()=>selectTool(b.dataset.tool));});
+  area.addEventListener('mousemove',e=>{const cp=document.getElementById('cursor-preview');const sz=S.penSize*S.zoom;cp.style.width=sz+'px';cp.style.height=sz+'px';cp.style.left=(e.clientX-sz/2)+'px';cp.style.top=(e.clientY-sz/2)+'px';});
+  area.addEventListener('mouseenter',()=>{if(S.tool!=='point'&&S.tool!=='move'&&S.tool!=='stroke')document.getElementById('cursor-preview').style.display='block';});
+  area.addEventListener('mouseleave',()=>{document.getElementById('cursor-preview').style.display='none';});
+  // コンテキストメニューを閉じる＆タイムライン選択解除
+  document.addEventListener('click',e=>{
+    hideCtxMenu();
+    // タイムラインセル外クリックで選択解除
+    if(!e.target.closest('.tl-cell')&&!e.target.closest('#ctx-menu')&&tlSelected.size>0){
+      tlSelected.clear();updateTimeline();
+    }
+  });
+  document.addEventListener('contextmenu',e=>{const m=document.getElementById('ctx-menu');if(m.style.display==='block'&&!m.contains(e.target))hideCtxMenu();});
+}
+function getPos(e){
+  const a=document.getElementById('canvas-area').getBoundingClientRect();
+  // area内座標
+  const ax=e.clientX-a.left,ay=e.clientY-a.top;
+  // translate逆
+  const tx=ax-S.panX,ty=ay-S.panY;
+  // rotate逆（原点0,0中心、transform-origin:0 0 に対応）
+  const rad=-S.rot*Math.PI/180,cos=Math.cos(rad),sin=Math.sin(rad);
+  const rx=cos*tx-sin*ty,ry=sin*tx+cos*ty;
+  // scale逆
+  return{x:rx/S.zoom,y:ry/S.zoom};
+}
+function onDown(e){
+  if(e.button===1){panning=true;lastMouse={x:e.clientX,y:e.clientY};return;}
+  if(spaceHeld&&ctrlHeld){rotating=true;lastMouse={x:e.clientX,y:e.clientY};document.getElementById('rotation-indicator').style.display='block';return;}
+  if(spaceHeld){panning=true;lastMouse={x:e.clientX,y:e.clientY};return;}
+  if(e.button!==0)return;const p=getPos(e);
+
+  // ポイント編集ツール
+  if(S.tool==='point'){onDownPoint(p,e);return;}
+  // ストローク編集ツール
+  if(S.tool==='stroke'){onDownStroke(p,e);return;}
+  // 移動ツール
+  if(S.tool==='move'){onDownMove(p,e);return;}
+
+  if(S.tool==='pen'||S.tool==='eraser'){drawing=true;curPoints=[{x:p.x,y:p.y}];pushUndo();drawingSnapshot=layerCtxs[S.layer].getImageData(0,0,S.cw,S.ch);}
+  else if(S.tool==='line'||S.tool==='circle'||S.tool==='rect'){drawing=true;shapeStart={x:p.x,y:p.y};pushUndo();drawingSnapshot=layerCtxs[S.layer].getImageData(0,0,S.cw,S.ch);}
+}
+function onMove(e){
+  if(panning){S.panX+=e.clientX-lastMouse.x;S.panY+=e.clientY-lastMouse.y;lastMouse={x:e.clientX,y:e.clientY};updateTransform();return;}
+  if(rotating){S.rot+=(e.clientX-lastMouse.x)*0.5;lastMouse={x:e.clientX,y:e.clientY};document.getElementById('rotation-indicator').textContent=Math.round(S.rot)+'°';updateTransform();return;}
+
+  const p=getPos(e);
+  // ポイント編集ツール
+  if(S.tool==='point'){onMovePoint(p,e);return;}
+  // ストローク編集ツール
+  if(S.tool==='stroke'){onMoveStroke(p,e);return;}
+  // 移動ツール
+  if(S.tool==='move'){onMoveMove(p,e);return;}
+
+  if(!drawing)return;
+  if(S.tool==='pen'||S.tool==='eraser'){curPoints.push({x:p.x,y:p.y});renderStrokePreview();}else renderShapePreview(p);
+}
+function onUp(e){
+  if(panning){panning=false;return;}if(rotating){rotating=false;document.getElementById('rotation-indicator').style.display='none';return;}
+
+  const p=getPos(e);
+  // ポイント編集ツール
+  if(S.tool==='point'){onUpPoint(p,e);return;}
+  // ストローク編集ツール
+  if(S.tool==='stroke'){onUpStroke(p,e);return;}
+  // 移動ツール
+  if(S.tool==='move'){onUpMove(p,e);return;}
+
+  if(!drawing)return;drawing=false;const fr=CF()[S.layer].frames[S.frame];
+  if(S.tool==='pen'&&curPoints.length>=2){const sm=smoothPoints(curPoints);fr.strokes.push({type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  else if(S.tool==='eraser'&&curPoints.length>=2){const sm=smoothPoints(curPoints);fr.strokes.push({type:'eraser',controls:toBezier(sm),size:S.penSize*3,order:fr.strokes.length});}
+  else if(S.tool==='line'&&shapeStart){fr.strokes.push({type:'line',x1:shapeStart.x,y1:shapeStart.y,x2:p.x,y2:p.y,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  else if(S.tool==='circle'&&shapeStart){fr.strokes.push({type:'ellipse',cx:(shapeStart.x+p.x)/2,cy:(shapeStart.y+p.y)/2,rx:Math.abs(p.x-shapeStart.x)/2,ry:Math.abs(p.y-shapeStart.y)/2,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  else if(S.tool==='rect'&&shapeStart){fr.strokes.push({type:'rect',x:Math.min(shapeStart.x,p.x),y:Math.min(shapeStart.y,p.y),w:Math.abs(p.x-shapeStart.x),h:Math.abs(p.y-shapeStart.y),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  curPoints=[];shapeStart=null;drawingSnapshot=null;renderAll();updateTimeline();
+}
+function onWheel(e){e.preventDefault();const a=document.getElementById('canvas-area').getBoundingClientRect();const mx=e.clientX-a.left,my=e.clientY-a.top;const old=S.zoom;S.zoom=Math.max(0.1,Math.min(10,S.zoom*(e.deltaY>0?0.9:1.1)));S.panX=mx-(mx-S.panX)*(S.zoom/old);S.panY=my-(my-S.panY)*(S.zoom/old);updateTransform();}
+function onKeyDown(e){
+  if(e.code==='Space'){spaceHeld=true;e.preventDefault();}
+  if(e.ctrlKey||e.metaKey)ctrlHeld=true;
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undoAction();}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redoAction();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='c'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxCopyFrame();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxPasteFrame();}
+  if(!e.ctrlKey&&!e.metaKey){if(e.key==='p')selectTool('pen');if(e.key==='l')selectTool('line');if(e.key==='c')selectTool('circle');if(e.key==='r')selectTool('rect');if(e.key==='e')selectTool('eraser');if(e.key==='a')selectTool('point');if(e.key==='s')selectTool('stroke');if(e.key==='v')selectTool('move');}
+  if(e.key==='ArrowRight')goNextFrame();if(e.key==='ArrowLeft')goPrevFrame();
+  if(e.key==='Escape'){S.rot=0;updateTransform();}
+  // Delete/Backspaceでストローク削除（ストローク編集ツール時）
+  if((e.key==='Delete'||e.key==='Backspace')&&S.tool==='stroke'&&strokeEditIdx>=0){
+    e.preventDefault();const fr=CF()[S.layer].frames[S.frame];
+    if(fr&&strokeEditIdx<fr.strokes.length){pushUndo();fr.strokes.splice(strokeEditIdx,1);strokeEditIdx=-1;strokeEditCorners=null;strokeEditCenter=null;renderAll();updateTimeline();notify('ストロークを削除');}
+  }
+  // Delete/Backspaceでタイムライン選択セルを一括クリア
+  if((e.key==='Delete'||e.key==='Backspace')&&tlSelected.size>0&&S.tool!=='stroke'){
+    e.preventDefault();pushUndo();
+    for(const k of tlSelected){
+      const p=k.split('-');const li=+p[0],fi=+p[1];
+      CF()[li].frames[fi]={strokes:[],draftImg:null};
+      delete CFD()[li+'-'+fi];
+    }
+    tlSelected.clear();renderAll();updateTimeline();notify('選択フレームをクリア');
+  }
+  // Escで選択解除
+  if(e.key==='Escape'&&tlSelected.size>0){tlSelected.clear();updateTimeline();}
+}
+function onKeyUp(e){if(e.code==='Space')spaceHeld=false;if(!e.ctrlKey&&!e.metaKey)ctrlHeld=false;}
+function selectTool(t){
+  S.tool=t;document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+  // ツール切替時にポイント編集状態クリア
+  if(t!=='point'){selectedStrokeIdx=-1;dragPointInfo=null;selectedPointInfo=null;}
+  if(t!=='stroke'){strokeEditIdx=-1;strokeEditMode='';strokeEditCorners=null;strokeEditCenter=null;strokeEditAnchor=null;}
+  if(t!=='move'){moveDragging=false;moveTargetIdx=-1;}
+  // ツールバー下部パネル切替
+  document.getElementById('pen-settings').style.display=(t==='pen'||t==='line'||t==='circle'||t==='rect'||t==='eraser')?'':'none';
+  document.getElementById('stroke-point-settings').style.display=(t==='stroke'||t==='point')?'':'none';
+  updateStrokePointSlider();
+  renderAll();
+  // カーソル変更
+  const area=document.getElementById('canvas-area');
+  const cp=document.getElementById('cursor-preview');
+  if(t==='point'||t==='stroke'){area.style.cursor='default';cp.style.display='none';}
+  else if(t==='move'){area.style.cursor='move';cp.style.display='none';}
+  else{area.style.cursor='crosshair';cp.style.display='';}
+}
+
+// ===========================================================
+// コンテキストメニュー（タイムライン右クリック）
+// ===========================================================
+function showCtxMenu(e,li,fi){
+  e.preventDefault();e.stopPropagation();
+  ctxLayer=li;ctxFrame=fi;
+  const m=document.getElementById('ctx-menu');
+  document.getElementById('ctx-paste').classList.toggle('disabled',!clipFrame);
+  document.getElementById('ctx-paste-all').classList.toggle('disabled',!clipAllFrames);
+  m.style.display='block';m.style.left=e.clientX+'px';m.style.top=e.clientY+'px';
+  // メニューが画面外に出ないよう調整
+  const rect=m.getBoundingClientRect();
+  if(rect.right>window.innerWidth)m.style.left=(e.clientX-rect.width)+'px';
+  if(rect.bottom>window.innerHeight)m.style.top=(e.clientY-rect.height)+'px';
+}
+function hideCtxMenu(){document.getElementById('ctx-menu').style.display='none';}
+
+function ctxCopyFrame(){
+  const fr=CF()[ctxLayer].frames[ctxFrame];
+  clipFrame=JSON.parse(JSON.stringify(fr));
+  hideCtxMenu();notify(`レイヤー${ctxLayer+1} フレーム${ctxFrame+1} をコピー`);
+}
+function ctxPasteFrame(){
+  if(!clipFrame){notify('コピーされたフレームがありません');hideCtxMenu();return;}
+  pushUndo();
+  CF()[ctxLayer].frames[ctxFrame]=JSON.parse(JSON.stringify(clipFrame));
+  hideCtxMenu();renderAll();updateTimeline();notify(`フレーム${ctxFrame+1} に貼り付け`);
+}
+function ctxCopyAllLayers(){
+  clipAllFrames=[];
+  for(let li=0;li<LAYER_DEFS.length;li++){clipAllFrames.push(JSON.parse(JSON.stringify(CF()[li].frames[ctxFrame])));}
+  hideCtxMenu();notify(`全レイヤー フレーム${ctxFrame+1} をコピー`);
+}
+function ctxPasteAllLayers(){
+  if(!clipAllFrames){notify('コピーされたフレームがありません');hideCtxMenu();return;}
+  pushUndo();
+  for(let li=0;li<LAYER_DEFS.length;li++){if(clipAllFrames[li])CF()[li].frames[ctxFrame]=JSON.parse(JSON.stringify(clipAllFrames[li]));}
+  hideCtxMenu();renderAll();updateTimeline();notify(`全レイヤー フレーム${ctxFrame+1} に貼り付け`);
+}
+function ctxClearFrame(){
+  pushUndo();
+  CF()[ctxLayer].frames[ctxFrame]={strokes:[],draftImg:null};
+  hideCtxMenu();renderAll();updateTimeline();notify(`フレーム${ctxFrame+1} をクリア`);
+}
+function ctxInsertFrame(){
+  pushUndo();const f=ctxFrame+1;
+  for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(f,0,{strokes:[],draftImg:null});
+  CC().totalFrames++;hideCtxMenu();goToFrame(f);notify('キーフレームを挿入');
+}
+function ctxSetDuration(){
+  hideCtxMenu();
+  document.getElementById('dur-modal-input').value=CFD()[ctxLayer+'-'+ctxFrame]||1;
+  document.getElementById('duration-modal').classList.add('show');
+}
+function applyDurModal(){
+  const v=+document.getElementById('dur-modal-input').value;
+  if(v>=1)CFD()[ctxLayer+'-'+ctxFrame]=v;
+  closeModal('duration-modal');updateTimeline();notify(`フレーム${ctxFrame+1} → ${v}f持続`);
+}
+
+// ===========================================================
+// スムージング & ベジェ
+// ===========================================================
+function smoothPoints(pts){
+  if(pts.length<3)return pts;
+  const totalLen=pathLength(pts);if(totalLen<2)return pts;
+  const sv=S.penSmooth/100; // 0.0〜1.0
+  // sv=0: 補正なし（間引きのみ最小限）
+  if(sv===0){
+    // 距離ベースで最低限リサンプル（1px間隔をまとめる程度）
+    const re=resamplePath(pts,Math.max(3,Math.floor(totalLen/1.5)));
+    return rdp(re,0.3);
+  }
+  // リサンプル間隔: sv=0→1.5px, sv=1→6px
+  const spacing=1.5+sv*4.5;
+  const numSamples=Math.max(3,Math.floor(totalLen/spacing));
+  const re=resamplePath(pts,numSamples);
+  // スムージング強度: sv=0→0, sv=1→0.35（前後の重み）
+  const w=sv*0.35;
+  const r=[re[0]];
+  for(let i=1;i<re.length-1;i++){
+    const p=re[i-1],c=re[i],n=re[i+1];
+    r.push({x:p.x*w+c.x*(1-2*w)+n.x*w,y:p.y*w+c.y*(1-2*w)+n.y*w});
+  }
+  r.push(re[re.length-1]);
+  // RDP閾値: sv=0→0.3, sv=1→1.5
+  const rdpEp=0.3+sv*1.2;
+  return rdp(r,rdpEp);
+}
+function pathLength(pts){let l=0;for(let i=1;i<pts.length;i++)l+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);return l;}
+function resamplePath(pts,n){
+  const tl=pathLength(pts);if(tl===0||n<2)return[pts[0],pts[pts.length-1]];
+  const step=tl/(n-1);const r=[pts[0]];let idx=0,carry=0;
+  for(let i=1;i<n-1;i++){let target=step*i;while(idx<pts.length-1){const sl=Math.hypot(pts[idx+1].x-pts[idx].x,pts[idx+1].y-pts[idx].y);if(carry+sl>=target){const t=(target-carry)/sl;r.push({x:pts[idx].x+(pts[idx+1].x-pts[idx].x)*t,y:pts[idx].y+(pts[idx+1].y-pts[idx].y)*t});break;}carry+=sl;idx++;}}
+  r.push(pts[pts.length-1]);return r;
+}
+function rdp(pts,ep){if(pts.length<=2)return pts;let mx=0,mi=0;const f=pts[0],l=pts[pts.length-1];for(let i=1;i<pts.length-1;i++){const d=ptLineDist(pts[i],f,l);if(d>mx){mx=d;mi=i;}}if(mx>ep){const a=rdp(pts.slice(0,mi+1),ep);const b=rdp(pts.slice(mi),ep);return a.slice(0,-1).concat(b);}return[f,l];}
+function ptLineDist(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,ls=dx*dx+dy*dy;if(ls===0)return Math.hypot(p.x-a.x,p.y-a.y);let t=((p.x-a.x)*dx+(p.y-a.y)*dy)/ls;t=Math.max(0,Math.min(1,t));return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));}
+function toBezier(pts){
+  if(pts.length<2)return[];if(pts.length===2)return[{sx:pts[0].x,sy:pts[0].y,cx:(pts[0].x+pts[1].x)/2,cy:(pts[0].y+pts[1].y)/2,ex:pts[1].x,ey:pts[1].y}];
+  const c=[];c.push({sx:pts[0].x,sy:pts[0].y,cx:pts[0].x,cy:pts[0].y,ex:(pts[0].x+pts[1].x)/2,ey:(pts[0].y+pts[1].y)/2});
+  for(let i=1;i<pts.length-1;i++)c.push({sx:(pts[i-1].x+pts[i].x)/2,sy:(pts[i-1].y+pts[i].y)/2,cx:pts[i].x,cy:pts[i].y,ex:(pts[i].x+pts[i+1].x)/2,ey:(pts[i].y+pts[i+1].y)/2});
+  const n=pts.length-1;c.push({sx:(pts[n-1].x+pts[n].x)/2,sy:(pts[n-1].y+pts[n].y)/2,cx:pts[n].x,cy:pts[n].y,ex:pts[n].x,ey:pts[n].y});return c;
+}
+
+// ===========================================================
+// 描画
+// ===========================================================
+function renderAll(){
+  for(let i=0;i<LAYER_DEFS.length;i++){renderLayer(i,S.frame);layerCanvases[i].style.display=layerVis[i]?'block':'none';}
+  renderOnion();renderStrokeGuide();renderPointEditOverlay();renderStrokeEditOverlay();
+  updateStrokePointSlider();updateFrameGuide();
+}
+
+function updateFrameGuide(){
+  const el=document.getElementById('frame-guide-overlay');
+  const enabled=document.getElementById('frame-guide-enabled').checked;
+  if(!enabled){el.style.display='none';return;}
+  frameGuideW=+document.getElementById('frame-guide-w').value||1920;
+  frameGuideH=+document.getElementById('frame-guide-h').value||1080;
+  const left=(S.cw-frameGuideW)/2;
+  const top=(S.ch-frameGuideH)/2;
+  el.style.display='block';
+  el.style.left=left+'px';el.style.top=top+'px';
+  el.style.width=frameGuideW+'px';el.style.height=frameGuideH+'px';
+}
+function renderLayer(li,fi){
+  const ctx=layerCtxs[li];
+  const isDraft=LAYER_DEFS[li].type==='draft';
+  // 下書きレイヤーはCSS opacityで全描画（画像+ストローク）に不透明度適用
+  layerCanvases[li].style.opacity=isDraft?draftOpacity:1;
+
+  if(fi<0||fi>=CF()[li].frames.length){ctx.clearRect(0,0,S.cw,S.ch);return;}
+  const fr=getEffectiveFrame(li,fi);
+  if(!fr){ctx.clearRect(0,0,S.cw,S.ch);return;}
+
+  if(fr.draftImg){
+    const eidx=getEffectiveFrameIdx(li,fi);
+    const key=currentCut+'-'+li+'-'+eidx;
+    const drawWithImg=(img)=>{
+      ctx.clearRect(0,0,S.cw,S.ch);
+      ctx.drawImage(img,0,0,S.cw,S.ch);
+      drawStrokes(ctx,fr.strokes);if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
+    };
+    if(draftImgCache[key]&&draftImgCache[key].src===fr.draftImg){
+      drawWithImg(draftImgCache[key]);
+    }else{
+      const img=new Image();img.onload=()=>{
+        draftImgCache[key]=img;drawWithImg(img);
+      };img.src=fr.draftImg;
+    }
+    return;
+  }
+  ctx.clearRect(0,0,S.cw,S.ch);
+  drawStrokes(ctx,fr.strokes);if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
+}
+function drawStrokes(ctx,strokes){for(const s of strokes)drawStroke(ctx,s);}
+function drawStroke(ctx,s){
+  ctx.lineCap='square';ctx.lineJoin='miter';
+  if(s.type==='bezier'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();if(s.controls.length>0){ctx.moveTo(s.controls[0].sx,s.controls[0].sy);for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);}ctx.stroke();}
+  else if(s.type==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='#fff';ctx.lineWidth=s.size;ctx.beginPath();if(s.controls&&s.controls.length>0){ctx.moveTo(s.controls[0].sx,s.controls[0].sy);for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);}ctx.stroke();ctx.globalCompositeOperation='source-over';}
+  else if(s.type==='line'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();}
+  else if(s.type==='ellipse'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.ellipse(s.cx,s.cy,Math.max(1,s.rx),Math.max(1,s.ry),0,0,Math.PI*2);ctx.stroke();}
+  else if(s.type==='rect'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.rect(s.x,s.y,s.w,s.h);ctx.stroke();}
+}
+// 二値化：アルファ値を閾値で0か255に変換（アンチエイリアス除去）
+function binarizeCanvas(ctx,w,h){
+  const imgData=ctx.getImageData(0,0,w,h);
+  const d=imgData.data;
+  const threshold=128;
+  for(let i=3;i<d.length;i+=4){
+    d[i]=d[i]>=threshold?255:0;
+  }
+  ctx.putImageData(imgData,0,0);
+}
+function renderStrokePreview(){
+  const ctx=layerCtxs[S.layer];
+  if(drawingSnapshot){ctx.putImageData(drawingSnapshot,0,0);}else{renderLayer(S.layer,S.frame);}
+  if(curPoints.length<2)return;
+  ctx.lineCap='square';ctx.lineJoin='miter';
+  if(S.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='#fff';ctx.lineWidth=S.penSize*3;}
+  else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=S.penColor;ctx.lineWidth=S.penSize;}
+  ctx.beginPath();ctx.moveTo(curPoints[0].x,curPoints[0].y);for(let i=1;i<curPoints.length;i++)ctx.lineTo(curPoints[i].x,curPoints[i].y);ctx.stroke();ctx.globalCompositeOperation='source-over';
+  const isDraft=LAYER_DEFS[S.layer].type==='draft';
+  if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
+}
+function renderShapePreview(p){
+  const ctx=layerCtxs[S.layer];
+  if(drawingSnapshot){ctx.putImageData(drawingSnapshot,0,0);}else{renderLayer(S.layer,S.frame);}
+  if(!shapeStart)return;
+  ctx.strokeStyle=S.penColor;ctx.lineWidth=S.penSize;ctx.lineCap='square';ctx.lineJoin='miter';
+  if(S.tool==='line'){ctx.beginPath();ctx.moveTo(shapeStart.x,shapeStart.y);ctx.lineTo(p.x,p.y);ctx.stroke();}
+  else if(S.tool==='circle'){ctx.beginPath();ctx.ellipse((shapeStart.x+p.x)/2,(shapeStart.y+p.y)/2,Math.max(1,Math.abs(p.x-shapeStart.x)/2),Math.max(1,Math.abs(p.y-shapeStart.y)/2),0,0,Math.PI*2);ctx.stroke();}
+  else if(S.tool==='rect'){ctx.beginPath();ctx.rect(Math.min(shapeStart.x,p.x),Math.min(shapeStart.y,p.y),Math.abs(p.x-shapeStart.x),Math.abs(p.y-shapeStart.y));ctx.stroke();}
+  const isDraft=LAYER_DEFS[S.layer].type==='draft';
+  if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
+}
+
+// ===========================================================
+// ポイント編集ツール（クリスタ風：通過点のみ表示・移動）
+// ===========================================================
+// ベジェストロークの通過点（パス上の点）を取得
+function getStrokePathPoints(strokes,filterIdx){
+  const pts=[];
+  const list=(filterIdx>=0)?[{s:strokes[filterIdx],i:filterIdx}]:strokes.map((s,i)=>({s,i}));
+  for(const {s,i} of list){
+    if(s.type==='bezier'||s.type==='eraser'){
+      if(!s.controls||s.controls.length===0)continue;
+      // 最初の始点
+      pts.push({x:s.controls[0].sx,y:s.controls[0].sy,strokeIdx:i,type:'bezier',idx:0,sub:'s'});
+      // 各セグメントの終点（＝次セグメントの始点でもある通過点）
+      for(let ci=0;ci<s.controls.length;ci++){
+        pts.push({x:s.controls[ci].ex,y:s.controls[ci].ey,strokeIdx:i,type:'bezier',idx:ci,sub:'e'});
+      }
+    }else if(s.type==='line'){
+      pts.push({x:s.x1,y:s.y1,strokeIdx:i,type:'line',idx:0,sub:'s'});
+      pts.push({x:s.x2,y:s.y2,strokeIdx:i,type:'line',idx:0,sub:'e'});
+    }else if(s.type==='ellipse'){
+      pts.push({x:s.cx,y:s.cy,strokeIdx:i,type:'ellipse',idx:0,sub:'center'});
+      pts.push({x:s.cx+s.rx,y:s.cy,strokeIdx:i,type:'ellipse',idx:0,sub:'rx'});
+      pts.push({x:s.cx,y:s.cy-s.ry,strokeIdx:i,type:'ellipse',idx:0,sub:'ry'});
+    }else if(s.type==='rect'){
+      pts.push({x:s.x,y:s.y,strokeIdx:i,type:'rect',idx:0,sub:'tl'});
+      pts.push({x:s.x+s.w,y:s.y,strokeIdx:i,type:'rect',idx:0,sub:'tr'});
+      pts.push({x:s.x+s.w,y:s.y+s.h,strokeIdx:i,type:'rect',idx:0,sub:'br'});
+      pts.push({x:s.x,y:s.y+s.h,strokeIdx:i,type:'rect',idx:0,sub:'bl'});
+    }
+  }
+  return pts;
+}
+
+function findNearestPoint(pts,p,threshold){
+  let best=null,bestDist=threshold;
+  for(const pt of pts){
+    const d=Math.hypot(pt.x-p.x,pt.y-p.y);
+    if(d<bestDist){bestDist=d;best=pt;}
+  }
+  return best;
+}
+
+function hitTestStroke(strokes,p,threshold){
+  for(let i=strokes.length-1;i>=0;i--){
+    const s=strokes[i];
+    if(s.type==='bezier'||s.type==='eraser'){
+      if(!s.controls)continue;
+      for(const c of s.controls){
+        for(let t=0;t<=1;t+=0.05){
+          const bx=(1-t)*(1-t)*c.sx+2*(1-t)*t*c.cx+t*t*c.ex;
+          const by=(1-t)*(1-t)*c.sy+2*(1-t)*t*c.cy+t*t*c.ey;
+          if(Math.hypot(bx-p.x,by-p.y)<threshold+s.size/2)return i;
+        }
+      }
+    }else if(s.type==='line'){
+      const d=ptLineDist(p,{x:s.x1,y:s.y1},{x:s.x2,y:s.y2});
+      if(d<threshold+s.size/2)return i;
+    }else if(s.type==='ellipse'){
+      const dx=(p.x-s.cx)/Math.max(1,s.rx),dy=(p.y-s.cy)/Math.max(1,s.ry);
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(Math.abs(dist-1)*Math.max(s.rx,s.ry)<threshold+s.size/2)return i;
+    }else if(s.type==='rect'){
+      const inX=p.x>=s.x-threshold&&p.x<=s.x+s.w+threshold;
+      const inY=p.y>=s.y-threshold&&p.y<=s.y+s.h+threshold;
+      const nearL=Math.abs(p.x-s.x)<threshold+s.size/2;
+      const nearR=Math.abs(p.x-(s.x+s.w))<threshold+s.size/2;
+      const nearT=Math.abs(p.y-s.y)<threshold+s.size/2;
+      const nearB=Math.abs(p.y-(s.y+s.h))<threshold+s.size/2;
+      if((inY&&(nearL||nearR))||(inX&&(nearT||nearB)))return i;
+    }
+  }
+  return -1;
+}
+
+// 通過点移動：Catmull-Romで隣接制御点を自動再計算し滑らかなカーブを維持
+function movePathPoint(strokes,info,nx,ny){
+  const s=strokes[info.strokeIdx];
+  if(info.type==='bezier'){
+    const ctrls=s.controls;
+    if(info.sub==='c'){
+      // 制御点（ベジェハンドル）を直接ドラッグ → recalcせず直接移動
+      ctrls[info.idx].cx=nx;ctrls[info.idx].cy=ny;
+    }else if(info.sub==='s'&&info.idx===0){
+      ctrls[0].sx=nx;ctrls[0].sy=ny;
+      recalcControlPoints(ctrls);
+    }else if(info.sub==='e'){
+      const ci=info.idx;
+      ctrls[ci].ex=nx;ctrls[ci].ey=ny;
+      if(ci<ctrls.length-1){
+        ctrls[ci+1].sx=nx;ctrls[ci+1].sy=ny;
+      }
+      recalcControlPoints(ctrls);
+    }
+  }else if(info.type==='line'){
+    if(info.sub==='s'){s.x1=nx;s.y1=ny;}else{s.x2=nx;s.y2=ny;}
+  }else if(info.type==='ellipse'){
+    if(info.sub==='center'){s.cx=nx;s.cy=ny;}
+    else if(info.sub==='rx'){s.rx=Math.max(1,Math.abs(nx-s.cx));}
+    else if(info.sub==='ry'){s.ry=Math.max(1,Math.abs(ny-s.cy));}
+  }else if(info.type==='rect'){
+    if(info.sub==='tl'){const dx=nx-s.x,dy=ny-s.y;s.x=nx;s.y=ny;s.w-=dx;s.h-=dy;}
+    else if(info.sub==='tr'){s.w=nx-s.x;const dy=ny-s.y;s.y=ny;s.h-=dy;}
+    else if(info.sub==='br'){s.w=nx-s.x;s.h=ny-s.y;}
+    else if(info.sub==='bl'){const dx=nx-s.x;s.x=nx;s.w-=dx;s.h=ny-s.y;}
+  }
+}
+// Catmull-Romで全制御点を再計算（通過点の位置から滑らかな制御点を生成）
+function recalcControlPoints(ctrls){
+  if(!ctrls||ctrls.length===0)return;
+  // 通過点（アンカー）を収集
+  const pts=[{x:ctrls[0].sx,y:ctrls[0].sy}];
+  for(let i=0;i<ctrls.length;i++)pts.push({x:ctrls[i].ex,y:ctrls[i].ey});
+  // 各セグメントの制御点をCatmull-Romで計算
+  for(let i=0;i<ctrls.length;i++){
+    const p0=pts[Math.max(0,i-1)];
+    const p1=pts[i];       // 始点
+    const p2=pts[i+1];     // 終点
+    const p3=pts[Math.min(pts.length-1,i+2)];
+    // Catmull-Rom → cubic bezier control points
+    const cp1x=p1.x+(p2.x-p0.x)/6;
+    const cp1y=p1.y+(p2.y-p0.y)/6;
+    const cp2x=p2.x-(p3.x-p1.x)/6;
+    const cp2y=p2.y-(p3.y-p1.y)/6;
+    // quadratic近似：2つのcubic制御点の中点
+    ctrls[i].cx=(cp1x+cp2x)/2;
+    ctrls[i].cy=(cp1y+cp2y)/2;
+  }
+}
+
+function onDownPoint(p,e){
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  const hitR=POINT_RADIUS/S.zoom+3;
+
+  // 表示中のベジェハンドル（制御点）へのヒットテストを最優先
+  if(selectedStrokeIdx>=0&&selectedPointInfo){
+    const handlePts=getVisibleHandlePoints(fr.strokes,selectedStrokeIdx,selectedPointInfo);
+    const hHit=findNearestPoint(handlePts,p,hitR);
+    if(hHit){pushUndo();dragPointInfo=hHit;renderAll();return;}
+  }
+
+  // 選択中ストロークの通過点
+  const selPts=selectedStrokeIdx>=0?getStrokePathPoints(fr.strokes,selectedStrokeIdx):[];
+  let hit=findNearestPoint(selPts,p,hitR);
+  if(!hit){
+    const allPts=getStrokePathPoints(fr.strokes,-1);
+    hit=findNearestPoint(allPts,p,hitR);
+  }
+  if(hit){
+    pushUndo();dragPointInfo=hit;selectedStrokeIdx=hit.strokeIdx;
+    // 通過点を選択 → ハンドル表示用に保持
+    if(hit.sub!=='c')selectedPointInfo=hit;
+    renderAll();return;
+  }
+  // ストローク本体へのヒットテスト
+  const si=hitTestStroke(fr.strokes,p,8/S.zoom);
+  selectedStrokeIdx=(si>=0)?si:-1;
+  dragPointInfo=null;selectedPointInfo=null;
+  renderAll();
+}
+
+function onMovePoint(p,e){
+  if(!dragPointInfo)return;
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  movePathPoint(fr.strokes,dragPointInfo,p.x,p.y);
+  renderAll();
+}
+
+function onUpPoint(p,e){dragPointInfo=null;}
+
+// 選択中ポイントの前後セグメントの制御点（ベジェハンドル）を取得
+function getVisibleHandlePoints(strokes,si,activePoint){
+  const pts=[];
+  if(!activePoint||si<0||si>=strokes.length)return pts;
+  const s=strokes[si];
+  if(s.type!=='bezier'||!s.controls)return pts;
+  const ctrls=s.controls;
+  const added=new Set();
+  const addSeg=(idx)=>{
+    if(idx>=0&&idx<ctrls.length&&!added.has(idx)){
+      added.add(idx);
+      pts.push({x:ctrls[idx].cx,y:ctrls[idx].cy,strokeIdx:si,type:'bezier',idx,sub:'c'});
+    }
+  };
+  if(activePoint.sub==='s'&&activePoint.idx===0){
+    // 始点 → セグメント0の制御点
+    addSeg(0);
+  }else if(activePoint.sub==='e'){
+    const ci=activePoint.idx;
+    // この終点が属するセグメント
+    addSeg(ci);
+    // この終点＝次のセグメントの始点なので次も
+    addSeg(ci+1);
+  }else if(activePoint.sub==='c'){
+    addSeg(activePoint.idx);
+  }
+  return pts;
+}
+
+// ポイント編集オーバーレイ描画
+function renderPointEditOverlay(){
+  pointEditCtx.clearRect(0,0,S.cw,S.ch);
+  if(S.tool!=='point'&&S.tool!=='stroke'){pointEditCanvas.style.display='none';return;}
+  pointEditCanvas.style.display='block';
+  if(S.tool!=='point')return;
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  const ctx=pointEditCtx;
+  const r=POINT_RADIUS;
+
+  // 選択ストロークのパス強調
+  if(selectedStrokeIdx>=0&&selectedStrokeIdx<fr.strokes.length){
+    const s=fr.strokes[selectedStrokeIdx];
+    ctx.save();ctx.strokeStyle='rgba(78,205,196,0.5)';ctx.lineWidth=Math.max(s.size||2,4);ctx.lineCap='round';ctx.lineJoin='round';
+    if((s.type==='bezier'||s.type==='eraser')&&s.controls&&s.controls.length>0){
+      ctx.beginPath();ctx.moveTo(s.controls[0].sx,s.controls[0].sy);
+      for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 選択ポイント前後のベジェハンドル描画
+  const activeP=selectedPointInfo||dragPointInfo;
+  if(activeP&&selectedStrokeIdx>=0&&selectedStrokeIdx<fr.strokes.length){
+    const s=fr.strokes[selectedStrokeIdx];
+    if((s.type==='bezier'||s.type==='eraser')&&s.controls){
+      const handles=getVisibleHandlePoints(fr.strokes,selectedStrokeIdx,activeP);
+      for(const h of handles){
+        const c=s.controls[h.idx];
+        // 接線（始点→制御点→終点）
+        ctx.save();ctx.strokeStyle='rgba(78,205,196,0.3)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(c.sx,c.sy);ctx.lineTo(c.cx,c.cy);ctx.lineTo(c.ex,c.ey);ctx.stroke();
+        // 制御点（ダイヤモンド型）
+        const isActive=(dragPointInfo&&dragPointInfo.sub==='c'&&dragPointInfo.idx===h.idx);
+        if(isActive){ctx.fillStyle='#fff';ctx.strokeStyle='#e94560';ctx.lineWidth=2.5;}
+        else{ctx.fillStyle='rgba(78,205,196,0.7)';ctx.strokeStyle='rgba(78,205,196,0.9)';ctx.lineWidth=1.5;}
+        ctx.beginPath();ctx.moveTo(h.x,h.y-r);ctx.lineTo(h.x+r,h.y);ctx.lineTo(h.x,h.y+r);ctx.lineTo(h.x-r,h.y);ctx.closePath();ctx.fill();ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // 通過点描画
+  const pts=(selectedStrokeIdx>=0)?getStrokePathPoints(fr.strokes,selectedStrokeIdx):getStrokePathPoints(fr.strokes,-1);
+  for(const pt of pts){
+    ctx.save();
+    const isDragging=(dragPointInfo&&dragPointInfo.strokeIdx===pt.strokeIdx&&dragPointInfo.idx===pt.idx&&dragPointInfo.sub===pt.sub);
+    const isSelected=(!isDragging&&selectedPointInfo&&selectedPointInfo.strokeIdx===pt.strokeIdx&&selectedPointInfo.idx===pt.idx&&selectedPointInfo.sub===pt.sub);
+    if(isDragging||isSelected){ctx.fillStyle='#fff';ctx.strokeStyle='#e94560';ctx.lineWidth=2.5;}
+    else{ctx.fillStyle='rgba(233,69,96,0.8)';ctx.strokeStyle='#fff';ctx.lineWidth=1.5;}
+    ctx.beginPath();ctx.arc(pt.x,pt.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();
+  }
+}
+
+// ===========================================================
+// ストローク編集ツール（選択→移動/拡縮/回転）
+// ===========================================================
+function getStrokeBBox(s){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  const expand=(x,y)=>{if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;};
+  if(s.type==='bezier'||s.type==='eraser'){
+    if(!s.controls)return null;
+    for(const c of s.controls){expand(c.sx,c.sy);expand(c.cx,c.cy);expand(c.ex,c.ey);}
+  }else if(s.type==='line'){expand(s.x1,s.y1);expand(s.x2,s.y2);}
+  else if(s.type==='ellipse'){expand(s.cx-s.rx,s.cy-s.ry);expand(s.cx+s.rx,s.cy+s.ry);}
+  else if(s.type==='rect'){expand(s.x,s.y);expand(s.x+s.w,s.y+s.h);}
+  if(minX===Infinity)return null;
+  const pad=4;
+  return{x:minX-pad,y:minY-pad,w:maxX-minX+pad*2,h:maxY-minY+pad*2,cx:(minX+maxX)/2,cy:(minY+maxY)/2};
+}
+
+// BBoxから4頂点を生成
+function bboxToCorners(bb){
+  return[
+    {x:bb.x,y:bb.y},           // tl
+    {x:bb.x+bb.w,y:bb.y},      // tr
+    {x:bb.x+bb.w,y:bb.y+bb.h}, // br
+    {x:bb.x,y:bb.y+bb.h}       // bl
+  ];
+}
+function cornersCenter(c){
+  return{x:(c[0].x+c[1].x+c[2].x+c[3].x)/4,y:(c[0].y+c[1].y+c[2].y+c[3].y)/4};
+}
+// 回転ハンドル位置（上辺中央から20px外側）
+function getRotateHandle(corners){
+  const mx=(corners[0].x+corners[1].x)/2,my=(corners[0].y+corners[1].y)/2;
+  const cx=(corners[0].x+corners[2].x)/2,cy=(corners[0].y+corners[2].y)/2;
+  const dx=mx-cx,dy=my-cy;
+  const len=Math.hypot(dx,dy)||1;
+  return{x:mx+dx/len*20,y:my+dy/len*20};
+}
+// 点が回転した四角形の内部にあるか
+function pointInQuad(p,c){
+  // cross product sign check
+  const cross=(ax,ay,bx,by)=>ax*by-ay*bx;
+  for(let i=0;i<4;i++){
+    const j=(i+1)%4;
+    const ex=c[j].x-c[i].x,ey=c[j].y-c[i].y;
+    const fx=p.x-c[i].x,fy=p.y-c[i].y;
+    if(cross(ex,ey,fx,fy)<0)return false;
+  }
+  return true;
+}
+
+// ハンドル判定（回転対応）
+function hitBBoxHandle(corners,center,p,threshold){
+  if(!corners)return null;
+  // 回転ハンドル
+  const rh=getRotateHandle(corners);
+  if(Math.hypot(p.x-rh.x,p.y-rh.y)<threshold)return 'rotate';
+  // 角ハンドル
+  const names=['tl','tr','br','bl'];
+  for(let i=0;i<4;i++){
+    if(Math.hypot(p.x-corners[i].x,p.y-corners[i].y)<threshold)return names[i];
+  }
+  // 本体内部
+  if(pointInQuad(p,corners))return 'body';
+  return null;
+}
+
+function transformStroke(s,cx,cy,dx,dy,sx,sy,angle){
+  const cosA=Math.cos(angle),sinA=Math.sin(angle);
+  const tr=(ox,oy)=>{
+    let x=ox-cx,y=oy-cy;
+    x*=sx;y*=sy;
+    const rx=x*cosA-y*sinA,ry=x*sinA+y*cosA;
+    return{x:rx+cx+dx,y:ry+cy+dy};
+  };
+  if(s.type==='bezier'||s.type==='eraser'){
+    if(!s.controls)return;
+    for(const c of s.controls){
+      const ns=tr(c.sx,c.sy);c.sx=ns.x;c.sy=ns.y;
+      const nc=tr(c.cx,c.cy);c.cx=nc.x;c.cy=nc.y;
+      const ne=tr(c.ex,c.ey);c.ex=ne.x;c.ey=ne.y;
+    }
+  }else if(s.type==='line'){
+    const a=tr(s.x1,s.y1),b=tr(s.x2,s.y2);
+    s.x1=a.x;s.y1=a.y;s.x2=b.x;s.y2=b.y;
+  }else if(s.type==='ellipse'){
+    const ct=tr(s.cx,s.cy);s.cx=ct.x;s.cy=ct.y;
+    s.rx=Math.max(1,s.rx*sx);s.ry=Math.max(1,s.ry*sy);
+  }else if(s.type==='rect'){
+    const a=tr(s.x,s.y),b=tr(s.x+s.w,s.y+s.h);
+    s.x=Math.min(a.x,b.x);s.y=Math.min(a.y,b.y);
+    s.w=Math.abs(b.x-a.x);s.h=Math.abs(b.y-a.y);
+  }
+}
+
+// 頂点配列を同じ変換で動かす
+function transformCorners(corners,cx,cy,dx,dy,sx,sy,angle){
+  const cosA=Math.cos(angle),sinA=Math.sin(angle);
+  return corners.map(pt=>{
+    let x=pt.x-cx,y=pt.y-cy;
+    x*=sx;y*=sy;
+    const rx=x*cosA-y*sinA,ry=x*sinA+y*cosA;
+    return{x:rx+cx+dx,y:ry+cy+dy};
+  });
+}
+
+function initStrokeEditBox(si,strokes){
+  const bb=getStrokeBBox(strokes[si]);
+  if(!bb)return;
+  strokeEditCorners=bboxToCorners(bb);
+  strokeEditCenter=cornersCenter(strokeEditCorners);
+}
+
+function onDownStroke(p,e){
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  const hitR=8/S.zoom;
+  // 既に選択中ならハンドル判定
+  if(strokeEditIdx>=0&&strokeEditCorners){
+    const h=hitBBoxHandle(strokeEditCorners,strokeEditCenter,p,hitR);
+    if(h){
+      pushUndo();
+      strokeEditStart={x:p.x,y:p.y};
+      if(h==='body'){strokeEditMode='move';}
+      else if(h==='rotate'){
+        strokeEditMode='rotate';
+        const ax=strokeEditAnchor?strokeEditAnchor.x:strokeEditCenter.x;
+        const ay=strokeEditAnchor?strokeEditAnchor.y:strokeEditCenter.y;
+        strokeEditInitAngle=Math.atan2(p.y-ay,p.x-ax);
+      }else{
+        strokeEditMode='scale';
+        strokeEditInitScale=Math.hypot(p.x-strokeEditCenter.x,p.y-strokeEditCenter.y);
+      }
+      return;
+    }
+  }
+  // ストローク選択（クリック位置をアンカーとして記録）
+  const si=hitTestStroke(fr.strokes,p,hitR);
+  if(si>=0){
+    strokeEditIdx=si;
+    initStrokeEditBox(si,fr.strokes);
+    strokeEditAnchor={x:p.x,y:p.y};
+    strokeEditMode='';
+  }else{
+    strokeEditIdx=-1;strokeEditCorners=null;strokeEditCenter=null;strokeEditAnchor=null;strokeEditMode='';
+  }
+  renderAll();
+}
+
+function onMoveStroke(p,e){
+  if(strokeEditIdx<0||!strokeEditStart||!strokeEditMode)return;
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  const s=fr.strokes[strokeEditIdx];
+
+  if(strokeEditMode==='move'){
+    const dx=p.x-strokeEditStart.x,dy=p.y-strokeEditStart.y;
+    offsetStroke(s,dx,dy);
+    // ボックスとアンカーも一緒に移動
+    strokeEditCorners=strokeEditCorners.map(c=>({x:c.x+dx,y:c.y+dy}));
+    strokeEditCenter={x:strokeEditCenter.x+dx,y:strokeEditCenter.y+dy};
+    if(strokeEditAnchor)strokeEditAnchor={x:strokeEditAnchor.x+dx,y:strokeEditAnchor.y+dy};
+    strokeEditStart={x:p.x,y:p.y};
+  }else if(strokeEditMode==='scale'){
+    const dist=Math.hypot(p.x-strokeEditCenter.x,p.y-strokeEditCenter.y);
+    const scale=dist/Math.max(1,strokeEditInitScale);
+    const cx=strokeEditCenter.x,cy=strokeEditCenter.y;
+    transformStroke(s,cx,cy,0,0,scale,scale,0);
+    strokeEditCorners=transformCorners(strokeEditCorners,cx,cy,0,0,scale,scale,0);
+    strokeEditCenter=cornersCenter(strokeEditCorners);
+    if(strokeEditAnchor){
+      const ax=strokeEditAnchor.x,ay=strokeEditAnchor.y;
+      strokeEditAnchor={x:cx+(ax-cx)*scale,y:cy+(ay-cy)*scale};
+    }
+    strokeEditInitScale=dist;
+  }else if(strokeEditMode==='rotate'){
+    const ax=strokeEditAnchor?strokeEditAnchor.x:strokeEditCenter.x;
+    const ay=strokeEditAnchor?strokeEditAnchor.y:strokeEditCenter.y;
+    const angle=Math.atan2(p.y-ay,p.x-ax);
+    const da=angle-strokeEditInitAngle;
+    transformStroke(s,ax,ay,0,0,1,1,da);
+    strokeEditCorners=transformCorners(strokeEditCorners,ax,ay,0,0,1,1,da);
+    strokeEditCenter=cornersCenter(strokeEditCorners);
+    strokeEditInitAngle=angle;
+  }
+  renderAll();
+}
+
+function onUpStroke(p,e){
+  strokeEditMode='';strokeEditStart=null;
+}
+
+// ストローク編集オーバーレイ描画（回転対応バウンディングボックス+ハンドル）
+function renderStrokeEditOverlay(){
+  if(S.tool!=='stroke'||strokeEditIdx<0||!strokeEditCorners)return;
+  const ctx=pointEditCtx;
+  const c=strokeEditCorners;
+  const r=5;
+
+  ctx.save();
+  // 回転対応バウンディングボックス（四角形パス）
+  ctx.strokeStyle='rgba(78,205,196,0.8)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);
+  ctx.beginPath();
+  ctx.moveTo(c[0].x,c[0].y);ctx.lineTo(c[1].x,c[1].y);ctx.lineTo(c[2].x,c[2].y);ctx.lineTo(c[3].x,c[3].y);ctx.closePath();
+  ctx.stroke();ctx.setLineDash([]);
+
+  // 回転ハンドルへの線
+  const rh=getRotateHandle(c);
+  ctx.strokeStyle='rgba(78,205,196,0.4)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo((c[0].x+c[1].x)/2,(c[0].y+c[1].y)/2);ctx.lineTo(rh.x,rh.y);ctx.stroke();
+
+  // 回転ハンドル（紫丸）
+  ctx.fillStyle='rgba(168,85,247,0.8)';ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(rh.x,rh.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // 角ハンドル（四角）
+  ctx.fillStyle='rgba(78,205,196,0.8)';ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
+  for(let i=0;i<4;i++){
+    ctx.beginPath();ctx.rect(c[i].x-r,c[i].y-r,r*2,r*2);ctx.fill();ctx.stroke();
+  }
+
+  // アンカーポイント（回転軸）表示
+  if(strokeEditAnchor){
+    const ax=strokeEditAnchor.x,ay=strokeEditAnchor.y;
+    ctx.strokeStyle='rgba(233,69,96,0.9)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(ax-6,ay);ctx.lineTo(ax+6,ay);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ax,ay-6);ctx.lineTo(ax,ay+6);ctx.stroke();
+    ctx.beginPath();ctx.arc(ax,ay,4,0,Math.PI*2);ctx.strokeStyle='rgba(233,69,96,0.7)';ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ===========================================================
+// 全体移動ツール
+// ===========================================================
+function onDownMove(p,e){
+  const fr=CF()[S.layer].frames[S.frame];if(!fr||fr.strokes.length===0)return;
+  pushUndo();
+  moveDragging=true;moveMode='all';moveDragStart={x:p.x,y:p.y};
+}
+
+function onMoveMove(p,e){
+  if(!moveDragging||!moveDragStart)return;
+  const dx=p.x-moveDragStart.x,dy=p.y-moveDragStart.y;
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return;
+  for(const s of fr.strokes)offsetStroke(s,dx,dy);
+  moveDragStart={x:p.x,y:p.y};
+  renderAll();
+}
+
+function onUpMove(p,e){
+  moveDragging=false;moveDragStart=null;
+}
+
+function offsetStroke(s,dx,dy){
+  if(s.type==='bezier'||s.type==='eraser'){
+    if(!s.controls)return;
+    for(const c of s.controls){c.sx+=dx;c.sy+=dy;c.cx+=dx;c.cy+=dy;c.ex+=dx;c.ey+=dy;}
+  }else if(s.type==='line'){
+    s.x1+=dx;s.y1+=dy;s.x2+=dx;s.y2+=dy;
+  }else if(s.type==='ellipse'){
+    s.cx+=dx;s.cy+=dy;
+  }else if(s.type==='rect'){
+    s.x+=dx;s.y+=dy;
+  }
+}
+
+// ===========================================================
+// ストロークポイント数調整（リサンプリング）
+// ===========================================================
+// ベジェ曲線をt値で評価して通過点列を得る
+function sampleBezierPath(controls,numSamples){
+  if(!controls||controls.length===0)return[];
+  const pts=[];
+  const totalSegs=controls.length;
+  for(let i=0;i<numSamples;i++){
+    const globalT=i/(numSamples-1)*totalSegs;
+    const segIdx=Math.min(Math.floor(globalT),totalSegs-1);
+    const localT=globalT-segIdx;
+    const c=controls[segIdx];
+    const t=localT,mt=1-t;
+    pts.push({x:mt*mt*c.sx+2*mt*t*c.cx+t*t*c.ex,y:mt*mt*c.sy+2*mt*t*c.cy+t*t*c.ey});
+  }
+  return pts;
+}
+// 通過点列からベジェ制御点列を再構築（Catmull-Rom→ベジェ変換）
+function fitBezierToPoints(pts){
+  if(pts.length<2)return[];
+  const controls=[];
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(0,i-1)];
+    const p1=pts[i];
+    const p2=pts[i+1];
+    const p3=pts[Math.min(pts.length-1,i+2)];
+    // Catmull-Rom to cubic bezier, then cubic→quadratic approximation
+    const cx1=p1.x+(p2.x-p0.x)/6;
+    const cy1=p1.y+(p2.y-p0.y)/6;
+    const cx2=p2.x-(p3.x-p1.x)/6;
+    const cy2=p2.y-(p3.y-p1.y)/6;
+    // quadratic control point = midpoint of cubic control points
+    const qcx=(cx1+cx2)/2;
+    const qcy=(cy1+cy2)/2;
+    controls.push({sx:p1.x,sy:p1.y,cx:qcx,cy:qcy,ex:p2.x,ey:p2.y});
+  }
+  return controls;
+}
+// ストロークのポイント数をリサンプリング
+function resampleStrokePoints(s,newCount){
+  if(s.type!=='bezier'||!s.controls||s.controls.length===0)return;
+  // 元の曲線上の通過点を多めにサンプリング
+  const denseSamples=sampleBezierPath(s.controls,Math.max(200,newCount*10));
+  // 等距離で間引いてnewCount個の通過点を得る
+  const totalLen=[];let len=0;totalLen.push(0);
+  for(let i=1;i<denseSamples.length;i++){
+    len+=Math.hypot(denseSamples[i].x-denseSamples[i-1].x,denseSamples[i].y-denseSamples[i-1].y);
+    totalLen.push(len);
+  }
+  const step=len/(newCount);
+  const keyPts=[denseSamples[0]];
+  let nextDist=step;
+  for(let i=1;i<denseSamples.length;i++){
+    if(totalLen[i]>=nextDist){
+      keyPts.push(denseSamples[i]);
+      nextDist+=step;
+    }
+  }
+  // 必ず終点を含める
+  const last=denseSamples[denseSamples.length-1];
+  if(keyPts.length>0&&Math.hypot(keyPts[keyPts.length-1].x-last.x,keyPts[keyPts.length-1].y-last.y)>0.5){
+    keyPts.push(last);
+  }
+  if(keyPts.length<2)return;
+  s.controls=fitBezierToPoints(keyPts);
+}
+// スライダー表示更新
+function getSelectedStrokeForSlider(){
+  const fr=CF()[S.layer].frames[S.frame];if(!fr)return null;
+  let idx=-1;
+  if(S.tool==='stroke'&&strokeEditIdx>=0)idx=strokeEditIdx;
+  else if(S.tool==='point'&&selectedStrokeIdx>=0)idx=selectedStrokeIdx;
+  if(idx<0||idx>=fr.strokes.length)return null;
+  const s=fr.strokes[idx];
+  if(s.type!=='bezier'||!s.controls)return null;
+  return s;
+}
+function updateStrokePointSlider(){
+  const slider=document.getElementById('stroke-point-slider');
+  const val=document.getElementById('stroke-point-val');
+  const s=getSelectedStrokeForSlider();
+  if(!s){val.textContent='-';slider.value=10;slider.disabled=true;return;}
+  const n=s.controls.length+1; // 通過点の数=セグメント数+1
+  val.textContent=n;
+  slider.value=n;
+  slider.min=2;
+  slider.max=Math.max(n*3,100);
+  slider.disabled=false;
+}
+let _strokePointSliderBak=null; // undo用のバックアップ
+function onStrokePointSliderInput(e){
+  const s=getSelectedStrokeForSlider();if(!s)return;
+  const newPts=+e.target.value;
+  if(newPts<2)return;
+  // 初回ドラッグ時にundoバックアップ
+  if(!_strokePointSliderBak){
+    pushUndo();
+    _strokePointSliderBak=JSON.parse(JSON.stringify(s.controls));
+  }
+  // 元のバックアップからリサンプリング（累積劣化防止）
+  const tmpS={type:'bezier',controls:JSON.parse(JSON.stringify(_strokePointSliderBak))};
+  resampleStrokePoints(tmpS,newPts);
+  s.controls=tmpS.controls;
+  document.getElementById('stroke-point-val').textContent=s.controls.length+1;
+  renderAll();
+}
+// スライダー離した時にバックアップをクリア
+document.addEventListener('mouseup',()=>{_strokePointSliderBak=null;});
+
+// ===========================================================
+// オニオンスキン
+// ===========================================================
+function renderOnion(){
+  onionCtx.clearRect(0,0,S.cw,S.ch);
+  if(!document.getElementById('onion-enabled').checked){onionCanvas.style.display='none';return;}
+  onionCanvas.style.display='block';
+  const pv=+document.getElementById('onion-prev').value||0,nx=+document.getElementById('onion-next').value||0;
+  for(let d=1;d<=pv;d++){const fi=S.frame-d;if(fi<0)continue;drawOnionFrame(fi,`rgba(233,69,96,${0.25/d})`);}
+  for(let d=1;d<=nx;d++){const fi=S.frame+d;if(fi>=CTF())continue;drawOnionFrame(fi,`rgba(78,205,196,${0.25/d})`);}
+}
+function drawOnionFrame(fi,col){for(let li=0;li<4;li++){if(!layerVis[li])continue;const fr=getEffectiveFrame(li,fi);if(!fr)continue;for(const s of fr.strokes){if(s.type==='eraser')continue;drawStroke(onionCtx,{...s,color:col});}}}
+function toggleOnionSkin(){const cb=document.getElementById('onion-enabled');cb.checked=!cb.checked;renderAll();}
+
+// ===========================================================
+// 書き順ガイド（CACANI風 - 前フレーム）
+// ===========================================================
+function renderStrokeGuide(){
+  guideCtx.clearRect(0,0,S.cw,S.ch);
+  if(!document.getElementById('stroke-guide-enabled').checked){guideCanvas.style.display='none';return;}
+  guideCanvas.style.display='block';
+  const prevFi=S.frame-1;if(prevFi<0)return;
+  for(let li=0;li<4;li++){if(!layerVis[li])continue;const fr=getEffectiveFrame(li,prevFi);if(!fr)continue;
+    const strokes=[...fr.strokes].filter(s=>s.type!=='eraser').sort((a,b)=>a.order-b.order);
+    for(let idx=0;idx<strokes.length;idx++)drawStrokeGuideAnnotation(guideCtx,strokes[idx],idx+1);
+  }
+}
+function drawStrokeGuideAnnotation(ctx,s,num){
+  let sx,sy,ex,ey;
+  if(s.type==='bezier'&&s.controls&&s.controls.length>0){const f=s.controls[0],l=s.controls[s.controls.length-1];sx=f.sx;sy=f.sy;ex=l.ex;ey=l.ey;}
+  else if(s.type==='line'){sx=s.x1;sy=s.y1;ex=s.x2;ey=s.y2;}
+  else if(s.type==='ellipse'){sx=s.cx+s.rx;sy=s.cy;ex=s.cx;ey=s.cy-s.ry;}
+  else if(s.type==='rect'){sx=s.x;sy=s.y;ex=s.x+s.w;ey=s.y;}else return;
+  ctx.save();ctx.fillStyle='rgba(233,69,96,0.85)';ctx.beginPath();ctx.arc(sx,sy-14,9,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(num),sx,sy-14);ctx.restore();
+  const dx=ex-sx,dy=ey-sy,dist=Math.hypot(dx,dy);if(dist<5)return;
+  const arrowLen=Math.min(40,dist*0.6),nx=dx/dist,ny=dy/dist,ax=sx+nx*arrowLen,ay=sy+ny*arrowLen;
+  ctx.save();ctx.strokeStyle='rgba(233,69,96,0.7)';ctx.lineWidth=2;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ax,ay);ctx.stroke();
+  const hl=8,angle=Math.atan2(ay-sy,ax-sx);
+  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax-hl*Math.cos(angle-0.4),ay-hl*Math.sin(angle-0.4));ctx.moveTo(ax,ay);ctx.lineTo(ax-hl*Math.cos(angle+0.4),ay-hl*Math.sin(angle+0.4));ctx.stroke();ctx.restore();
+}
+function toggleStrokeGuide(){const cb=document.getElementById('stroke-guide-enabled');cb.checked=!cb.checked;renderAll();}
+
+// ===========================================================
+// カット管理
+// ===========================================================
+function updateCutList(){
+  const list=document.getElementById('cut-list');list.innerHTML='';
+  for(let i=0;i<cuts.length;i++){const c=cuts[i];const item=document.createElement('div');item.className='cut-item'+(i===currentCut?' active':'');item.onclick=()=>switchCut(i);
+    const lbl=document.createElement('span');lbl.className='cut-label';lbl.textContent=c.name;
+    const info=document.createElement('span');info.className='cut-frames';info.textContent=c.totalFrames+'f';
+    item.appendChild(lbl);item.appendChild(info);list.appendChild(item);}
+  document.getElementById('current-cut-display').textContent=CC().name;
+}
+function switchCut(idx){currentCut=idx;S.frame=0;updateCutList();updateLayerList();updateTimeline();renderAll();}
+function addCut(){const num=cuts.length+1;const name='C_'+String(num).padStart(3,'0');cuts.push(createEmptyCut(name,24));switchCut(cuts.length-1);notify(`カット ${name} を追加`);}
+function removeCut(){if(cuts.length<=1){notify('最後のカットは削除できません');return;}if(!confirm(`${CC().name} を削除しますか？`))return;cuts.splice(currentCut,1);if(currentCut>=cuts.length)currentCut=cuts.length-1;for(let i=0;i<cuts.length;i++)cuts[i].name='C_'+String(i+1).padStart(3,'0');S.frame=0;updateCutList();updateLayerList();updateTimeline();renderAll();notify('カットを削除');}
+
+// ===========================================================
+// レイヤー
+// ===========================================================
+function updateLayerList(){
+  const list=document.getElementById('layer-list');list.innerHTML='';
+  for(let i=LAYER_DEFS.length-1;i>=0;i--){const d=LAYER_DEFS[i];const item=document.createElement('div');item.className='layer-item'+(i===S.layer?' active':'');item.onclick=()=>{S.layer=i;updateLayerList();renderAll();};
+    const dot=document.createElement('div');dot.className='layer-color-dot';dot.style.background=d.color;
+    const nm=document.createElement('div');nm.className='layer-name';nm.textContent=d.name;
+    const vis=document.createElement('button');vis.className='layer-vis-btn'+(layerVis[i]?'':' hidden');vis.textContent=layerVis[i]?'👁':'🚫';
+    vis.onclick=e=>{e.stopPropagation();layerVis[i]=!layerVis[i];updateLayerList();renderAll();};
+    item.appendChild(dot);item.appendChild(nm);item.appendChild(vis);list.appendChild(item);}
+}
+function clearCurrentLayer(){pushUndo();CF()[S.layer].frames[S.frame]={strokes:[],draftImg:null};renderAll();notify('クリア');}
+function duplicateFrame(){pushUndo();const nf=S.frame+1;if(nf<CTF()){CF()[S.layer].frames[nf]=JSON.parse(JSON.stringify(CF()[S.layer].frames[S.frame]));goToFrame(nf);notify('フレームを複製');}}
+
+// ===========================================================
+// タイムライン
+// ===========================================================
+function updateTimeline(){
+  const tf=CTF();const hd=document.getElementById('tl-header');hd.innerHTML='';
+  for(let f=0;f<tf;f++){const d=document.createElement('div');d.className='tl-frame-num'+(f===S.frame?' current':'');d.textContent=f+1;d.onclick=()=>goToFrame(f);hd.appendChild(d);}
+  const lb=document.getElementById('tl-layer-labels');lb.innerHTML='';
+  for(let i=0;i<LAYER_DEFS.length;i++){const d=document.createElement('div');d.className='tl-layer-label'+(i===S.layer?' active':'');d.onclick=()=>{S.layer=i;updateLayerList();updateTimeline();renderAll();};const dot=document.createElement('span');dot.className='dot';dot.style.background=LAYER_DEFS[i].color;d.appendChild(dot);d.appendChild(document.createTextNode(LAYER_DEFS[i].name));lb.appendChild(d);}
+  const rows=document.getElementById('tl-rows');rows.innerHTML='';
+  for(let i=0;i<LAYER_DEFS.length;i++){
+    const row=document.createElement('div');row.className='tl-row';
+    for(let f=0;f<tf;f++){
+      const cell=document.createElement('div');cell.className='tl-cell';
+      if(f===S.frame)cell.classList.add('current-frame');
+      const fr=CF()[i].frames[f];
+      const hasData=fr&&(fr.strokes.length>0||fr.draftImg);
+      if(hasData)cell.classList.add('has-data');
+      const dk=i+'-'+f;const durVal=CFD()[dk]||1;
+      if(durVal>1){cell.classList.add('hold-start');cell.title=durVal+'f持続';}
+      else{
+        const eidx=getEffectiveFrameIdx(i,f);
+        if(eidx!==f){cell.classList.add('hold-frame');cell.title='← フレーム'+(eidx+1)+'の持続';}
+      }
+      // 選択状態
+      if(tlSelected.has(i+'-'+f))cell.classList.add('tl-selected');
+      // ドラッグゴースト
+      if(tlDragging&&tlDragCurrent!==null){
+        const delta=tlDragCurrent-(tlDragSource?tlDragSource.fi:0);
+        const selArr=tlGetSelectedOnLayer(i);
+        if(selArr.length>0){
+          for(const sf of selArr){
+            if(f===sf+delta&&f!==sf)cell.classList.add('tl-drag-ghost');
+          }
+        }else if(tlDragSource&&tlDragSource.li===i&&f===tlDragSource.fi+delta&&f!==tlDragSource.fi){
+          cell.classList.add('tl-drag-ghost');
+        }
+      }
+      cell.dataset.li=i;cell.dataset.fi=f;
+      cell.addEventListener('mousedown',e=>tlCellMouseDown(e,i,f));
+      cell.addEventListener('contextmenu',e=>showCtxMenu(e,i,f));
+      row.appendChild(cell);
+    }rows.appendChild(row);
+  }
+  document.getElementById('current-frame-display').textContent=S.frame+1;
+  document.getElementById('total-frame-display').textContent=tf;
+  document.getElementById('info-frames').value=tf;
+}
+function goToFrame(f){if(f<0||f>=CTF())return;S.frame=f;updateTimeline();renderAll();}
+
+// タイムラインキーフレーム ドラッグ＆選択
+function tlGetSelectedOnLayer(li){
+  const arr=[];
+  for(const k of tlSelected){const p=k.split('-');if(+p[0]===li)arr.push(+p[1]);}
+  arr.sort((a,b)=>a-b);return arr;
+}
+function tlCellMouseDown(e,li,fi){
+  if(e.button!==0)return;
+  e.preventDefault();
+  const fr=CF()[li].frames[fi];
+  const hasData=fr&&(fr.strokes.length>0||fr.draftImg);
+  const durVal=CFD()[li+'-'+fi]||1;
+  const isKeyCell=hasData||durVal>1;
+  const key=li+'-'+fi;
+
+  if(e.shiftKey){
+    // Shift+クリック: 選択トグル（データのあるセルのみ）
+    if(isKeyCell){
+      if(tlSelected.has(key))tlSelected.delete(key);
+      else tlSelected.add(key);
+    }
+    S.layer=li;goToFrame(fi);updateLayerList();
+    return;
+  }
+
+  // 選択セルをドラッグ開始判定
+  if(tlSelected.has(key)||isKeyCell){
+    tlDragging=true;
+    tlDragSource={li,fi};
+    tlDragCurrent=fi;
+    // 選択中でない場合はこのセル単体をドラッグ
+    if(!tlSelected.has(key)&&!e.shiftKey){tlSelected.clear();if(isKeyCell)tlSelected.add(key);}
+
+    const onMove=ev=>{
+      const cell=document.elementFromPoint(ev.clientX,ev.clientY);
+      if(cell&&cell.dataset&&cell.dataset.fi!==undefined){
+        const newFi=+cell.dataset.fi;
+        if(newFi!==tlDragCurrent){
+          tlDragCurrent=newFi;
+          updateTimeline();
+        }
+      }
+    };
+    const onUp=ev=>{
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      if(tlDragging&&tlDragCurrent!==null&&tlDragCurrent!==tlDragSource.fi){
+        tlApplyDrag();
+      }else{
+        // クリックのみ（ドラッグなし）→ フレーム移動
+        if(!e.shiftKey)tlSelected.clear();
+        S.layer=li;goToFrame(fi);updateLayerList();
+      }
+      tlDragging=false;tlDragSource=null;tlDragCurrent=null;
+      updateTimeline();
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  }else{
+    // 空セルクリック
+    if(!e.shiftKey)tlSelected.clear();
+    S.layer=li;goToFrame(fi);updateLayerList();
+  }
+}
+function tlApplyDrag(){
+  if(!tlDragSource)return;
+  const delta=tlDragCurrent-tlDragSource.fi;
+  if(delta===0)return;
+  pushUndo();
+
+  // 全選択レイヤーのフレーム移動を収集
+  const layerMap={};// li -> [fi1,fi2,...]
+  for(const k of tlSelected){
+    const p=k.split('-');const li=+p[0],fi=+p[1];
+    if(!layerMap[li])layerMap[li]=[];
+    layerMap[li].push(fi);
+  }
+
+  const tf=CTF();
+  for(const liStr in layerMap){
+    const li=+liStr;
+    const srcFrames=layerMap[li].sort((a,b)=>a-b);
+    const frames=CF()[li].frames;
+    const dur=CFD();
+
+    // 移動先が範囲外ならスキップ
+    const minDst=srcFrames[0]+delta,maxDst=srcFrames[srcFrames.length-1]+delta;
+    if(minDst<0||maxDst>=tf)continue;
+
+    // 元データを退避
+    const saved=[];
+    for(const fi of srcFrames){
+      saved.push({fi,data:JSON.parse(JSON.stringify(frames[fi])),dur:dur[li+'-'+fi]||1});
+    }
+    // 元位置をクリア
+    for(const fi of srcFrames){
+      frames[fi]={strokes:[],draftImg:null};
+      delete dur[li+'-'+fi];
+    }
+    // 移動先に配置（既存データとスワップ）
+    const displaced=[];
+    for(const s of saved){
+      const dst=s.fi+delta;
+      // 移動先が他の選択セルの元位置でない場合、退避
+      if(!srcFrames.includes(dst)){
+        displaced.push({fi:dst,data:JSON.parse(JSON.stringify(frames[dst])),dur:dur[li+'-'+dst]||1});
+      }
+      frames[dst]=s.data;
+      if(s.dur>1)dur[li+'-'+dst]=s.dur;else delete dur[li+'-'+dst];
+    }
+    // 退避データを元位置に配置
+    for(const d of displaced){
+      // 空になった元位置を探す
+      for(const fi of srcFrames){
+        const curFr=frames[fi];
+        if(curFr&&curFr.strokes.length===0&&!curFr.draftImg){
+          frames[fi]=d.data;
+          if(d.dur>1)dur[li+'-'+fi]=d.dur;
+          break;
+        }
+      }
+    }
+  }
+
+  // 選択セットを移動先に更新
+  const newSel=new Set();
+  for(const k of tlSelected){
+    const p=k.split('-');const li=+p[0],fi=+p[1];
+    const dst=fi+delta;
+    if(dst>=0&&dst<tf)newSel.add(li+'-'+dst);
+  }
+  tlSelected=newSel;
+  goToFrame(Math.max(0,Math.min(tf-1,S.frame+delta)));
+}
+function goNextFrame(){goToFrame(S.frame+1);}function goPrevFrame(){goToFrame(S.frame-1);}
+function goFirstFrame(){goToFrame(0);}function goLastFrame(){goToFrame(CTF()-1);}
+function addFrame(){CC().totalFrames++;for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.push({strokes:[],draftImg:null});updateTimeline();}
+function removeFrame(){if(CTF()<=1)return;pushUndo();for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(S.frame,1);CC().totalFrames--;if(S.frame>=CTF())S.frame=CTF()-1;updateTimeline();renderAll();}
+function insertKeyframe(){pushUndo();const f=S.frame+1;for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(f,0,{strokes:[],draftImg:null});CC().totalFrames++;goToFrame(f);notify('キーフレームを挿入');}
+function updateFPS(){S.fps=+document.getElementById('fps-input').value||12;}
+
+// ===========================================================
+// 再生
+// ===========================================================
+function togglePlay(){S.playing?stopPlay():startPlay();}
+function startPlay(){S.playing=true;document.getElementById('play-btn').classList.add('active');document.getElementById('play-btn').textContent='⏸';playNext();}
+function stopPlay(){S.playing=false;document.getElementById('play-btn').classList.remove('active');document.getElementById('play-btn').textContent='▶';if(S.playTimer){clearTimeout(S.playTimer);S.playTimer=null;}}
+function playNext(){
+  if(!S.playing)return;
+  // 全レイヤーの持続値を確認し、最大持続でスキップ
+  let skip=1;
+  for(let li=0;li<LAYER_DEFS.length;li++){
+    const d=CFD()[li+'-'+S.frame]||1;
+    if(d>skip)skip=d;
+  }
+  let nf=S.frame+skip;
+  if(nf>=CTF())nf=0;
+  goToFrame(nf);
+  S.playTimer=setTimeout(playNext,1000/S.fps);
+}
+
+// ===========================================================
+// 自動中割
+// ===========================================================
+function showInbetweenDialog(){document.getElementById('inb-start').value=S.frame+1;document.getElementById('inb-end').value=Math.min(S.frame+2,CTF());document.getElementById('inb-count').value=3;document.getElementById('inbetween-dialog').classList.add('show');}
+function generateInbetweens(){
+  const sf=+document.getElementById('inb-start').value-1,ef=+document.getElementById('inb-end').value-1,cnt=+document.getElementById('inb-count').value,ease=document.getElementById('inb-easing').value;
+  if(sf<0||ef>=CTF()||sf>=ef){notify('フレーム範囲が不正です');return;}pushUndo();
+  const sS=CF()[S.layer].frames[sf].strokes,eS=CF()[S.layer].frames[ef].strokes;
+  for(let i=0;i<cnt;i++){const t=(i+1)/(cnt+1);const interp=interpStrokes(sS,eS,t,ease);const ins=sf+1+i;for(let li=0;li<LAYER_DEFS.length;li++){CF()[li].frames.splice(ins,0,{strokes:li===S.layer?interp:[],draftImg:null});}CC().totalFrames++;}
+  closeModal('inbetween-dialog');updateTimeline();renderAll();notify(`${cnt}枚の中割を生成`);
+}
+function interpStrokes(sa,sb,t,ease){const et=applyEase(t,ease);const r=[];const mx=Math.max(sa.length,sb.length);for(let i=0;i<mx;i++){const a=i<sa.length?sa[i]:null,b=i<sb.length?sb[i]:null;if(a&&b&&a.type===b.type)r.push(interpOne(a,b,et));else if(a&&!b)r.push(fadeS(a,1-et));else if(!a&&b)r.push(fadeS(b,et));else if(a&&b){et<0.5?r.push(fadeS(a,1-et*2)):r.push(fadeS(b,(et-0.5)*2));}}return r;}
+function interpOne(a,b,t){
+  if(a.type==='bezier'&&b.type==='bezier')return{type:'bezier',controls:interpBezier(a.controls,b.controls,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
+  if(a.type==='line'&&b.type==='line')return{type:'line',x1:lerp(a.x1,b.x1,t),y1:lerp(a.y1,b.y1,t),x2:lerp(a.x2,b.x2,t),y2:lerp(a.y2,b.y2,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
+  if(a.type==='ellipse'&&b.type==='ellipse')return{type:'ellipse',cx:lerp(a.cx,b.cx,t),cy:lerp(a.cy,b.cy,t),rx:lerp(a.rx,b.rx,t),ry:lerp(a.ry,b.ry,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
+  if(a.type==='rect'&&b.type==='rect')return{type:'rect',x:lerp(a.x,b.x,t),y:lerp(a.y,b.y,t),w:lerp(a.w,b.w,t),h:lerp(a.h,b.h,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};return a;
+}
+function interpBezier(ca,cb,t){const ml=Math.max(ca.length,cb.length);const ra=resampleCtrl(ca,ml),rb=resampleCtrl(cb,ml);return ra.map((a,i)=>{const b=rb[i];return{sx:lerp(a.sx,b.sx,t),sy:lerp(a.sy,b.sy,t),cx:lerp(a.cx,b.cx,t),cy:lerp(a.cy,b.cy,t),ex:lerp(a.ex,b.ex,t),ey:lerp(a.ey,b.ey,t)};});}
+function resampleCtrl(c,n){if(c.length===n)return c;if(c.length===0)return Array(n).fill({sx:0,sy:0,cx:0,cy:0,ex:0,ey:0});const r=[];for(let i=0;i<n;i++){const si=(i/(n-1||1))*(c.length-1);const lo=Math.floor(si),hi=Math.min(lo+1,c.length-1),f=si-lo;const a=c[lo],b=c[hi];r.push({sx:lerp(a.sx,b.sx,f),sy:lerp(a.sy,b.sy,f),cx:lerp(a.cx,b.cx,f),cy:lerp(a.cy,b.cy,f),ex:lerp(a.ex,b.ex,f),ey:lerp(a.ey,b.ey,f)});}return r;}
+function fadeS(s,a){const r=JSON.parse(JSON.stringify(s));if(r.color){const rgb=hex2rgb(r.color);if(rgb)r.color=`rgba(${rgb.r},${rgb.g},${rgb.b},${a})`;}return r;}
+function lerp(a,b,t){return a+(b-a)*t;}
+function lerpCol(a,b,t){const c1=hex2rgb(a)||{r:0,g:0,b:0},c2=hex2rgb(b)||{r:0,g:0,b:0};return`rgb(${Math.round(lerp(c1.r,c2.r,t))},${Math.round(lerp(c1.g,c2.g,t))},${Math.round(lerp(c1.b,c2.b,t))})`;}
+function hex2rgb(h){if(!h)return null;if(h.startsWith('rgb')){const m=h.match(/(\d+)/g);return m?{r:+m[0],g:+m[1],b:+m[2]}:null;}const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:null;}
+function applyEase(t,ty){switch(ty){case'easeIn':return t*t;case'easeOut':return t*(2-t);case'easeInOut':return t<0.5?2*t*t:-1+(4-2*t)*t;default:return t;}}
+
+// ===========================================================
+// Undo/Redo
+// ===========================================================
+function pushUndo(){undoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});if(undoStack.length>MAX_UNDO)undoStack.shift();redoStack=[];}
+function undoAction(){if(!undoStack.length)return;redoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});const s=undoStack.pop();cuts=s.cuts;currentCut=s.cc;S.frame=s.f;S.layer=s.li;updateCutList();updateLayerList();updateTimeline();renderAll();}
+function redoAction(){if(!redoStack.length)return;undoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});const s=redoStack.pop();cuts=s.cuts;currentCut=s.cc;S.frame=s.f;S.layer=s.li;updateCutList();updateLayerList();updateTimeline();renderAll();}
+
+// ===========================================================
+// 保存/読込
+// ===========================================================
+function getProjectName(){return document.getElementById('project-name-input').value.trim()||'untitled';}
+function saveProject(){
+  const pn=getProjectName();
+  const p={version:2,appName:'StrokeAnimationStudio',projectName:pn,cw:S.cw,ch:S.ch,fps:S.fps,cuts,currentCut,frame:S.frame,layer:S.layer,layerVis,
+    frameGuide:{w:frameGuideW,h:frameGuideH,enabled:document.getElementById('frame-guide-enabled').checked}};
+  const b=new Blob([JSON.stringify(p)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=pn+'.sasp';a.click();URL.revokeObjectURL(a.href);notify('保存: '+pn+'.sasp');
+}
+function loadProject(){document.getElementById('file-input-project').click();}
+function handleLoadProject(e){
+  const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=ev=>{try{
+    const p=JSON.parse(ev.target.result);if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
+    S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
+    if(p.version>=2){cuts=p.cuts;currentCut=p.currentCut||0;}else{cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];currentCut=0;}
+    S.frame=p.frame||0;S.layer=p.layer||0;layerVis=p.layerVis||{};
+    if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
+    document.getElementById('fps-input').value=S.fps;document.getElementById('info-width').value=S.cw;document.getElementById('info-height').value=S.ch;
+    if(p.frameGuide){
+      frameGuideW=p.frameGuide.w||1920;frameGuideH=p.frameGuide.h||1080;
+      document.getElementById('frame-guide-w').value=frameGuideW;
+      document.getElementById('frame-guide-h').value=frameGuideH;
+      document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
+    }
+    draftImgCache={};createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();renderAll();undoStack=[];redoStack=[];notify('読み込みました');
+  }catch(err){notify('エラー: '+err.message);}};rd.readAsText(f);e.target.value='';
+}
+
+// ===========================================================
+// 新規/キャンバス/下書き
+// ===========================================================
+function newProject(){
+  if(!confirm('現在の作業を破棄して新規作成しますか？'))return;
+  S.cw=2600;S.ch=1500;S.fps=12;S.frame=0;S.layer=0;cuts=[createEmptyCut('C_001',24)];currentCut=0;
+  for(let i=0;i<LAYER_DEFS.length;i++)layerVis[i]=true;undoStack=[];redoStack=[];draftImgCache={};
+  document.getElementById('project-name-input').value='untitled';document.getElementById('fps-input').value=S.fps;
+  document.getElementById('info-width').value=S.cw;document.getElementById('info-height').value=S.ch;
+  frameGuideW=1920;frameGuideH=1080;
+  document.getElementById('frame-guide-w').value=1920;document.getElementById('frame-guide-h').value=1080;
+  document.getElementById('frame-guide-enabled').checked=true;
+  createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();renderAll();notify('新規作成');
+}
+function showCanvasSizeDialog(){document.getElementById('canvas-w-input').value=S.cw;document.getElementById('canvas-h-input').value=S.ch;document.getElementById('canvas-size-modal').classList.add('show');}
+function applyCanvasSize(){const w=+document.getElementById('canvas-w-input').value,h=+document.getElementById('canvas-h-input').value;if(w<1||h<1||w>8192||h>8192){notify('サイズが不正');return;}pushUndo();S.cw=w;S.ch=h;document.getElementById('info-width').value=w;document.getElementById('info-height').value=h;createCanvases();centerCanvas();renderAll();closeModal('canvas-size-modal');notify(`キャンバス: ${w}×${h}`);}
+function applyProjectInfo(){
+  const w=+document.getElementById('info-width').value,h=+document.getElementById('info-height').value;
+  if(w<1||h<1||w>8192||h>8192){notify('サイズが不正');document.getElementById('info-width').value=S.cw;document.getElementById('info-height').value=S.ch;return;}
+  pushUndo();S.cw=w;S.ch=h;createCanvases();centerCanvas();renderAll();notify(`キャンバス: ${w}×${h}`);
+}
+function applyProjectInfoFrames(){
+  const nf=+document.getElementById('info-frames').value;
+  if(nf<1||nf>9999){notify('フレーム数が不正');document.getElementById('info-frames').value=CTF();return;}
+  pushUndo();
+  const old=CTF();
+  if(nf>old){
+    for(let i=0;i<LAYER_DEFS.length;i++)for(let f=old;f<nf;f++)CF()[i].frames.push({strokes:[],draftImg:null});
+  }else if(nf<old){
+    for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(nf);
+  }
+  CC().totalFrames=nf;
+  if(S.frame>=nf)S.frame=nf-1;
+  updateTimeline();renderAll();notify(`フレーム数: ${nf}`);
+}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function importDraftImage(){if(LAYER_DEFS[S.layer].type!=='draft'){notify('下書きレイヤーを選択してください');return;}document.getElementById('file-input-draft').click();}
+function handleDraftImage(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=ev=>{pushUndo();const dataUrl=ev.target.result;CF()[S.layer].frames[S.frame].draftImg=dataUrl;const img=new Image();img.onload=()=>{const key=currentCut+'-'+S.layer+'-'+S.frame;draftImgCache[key]=img;renderAll();notify('下書き読み込み');};img.src=dataUrl;};rd.readAsDataURL(f);e.target.value='';}
+
+// ===========================================================
+// 連番PNG出力（Starlit Timeline Editor互換方式）
+// ===========================================================
+
+async function exportAllPNG(){
+  const prog=document.getElementById('export-progress');
+  const fill=document.getElementById('export-progress-fill');
+  const text=document.getElementById('export-progress-text');
+  prog.style.display='block';fill.style.width='0%';
+
+  const zip=new JSZip();const pn=getProjectName();
+  let totalCount=0;for(const c of cuts)totalCount+=c.totalFrames;
+  let done=0;
+
+  const offscreen=document.createElement('canvas');offscreen.width=S.cw;offscreen.height=S.ch;
+  const offCtx=offscreen.getContext('2d');offCtx.imageSmoothingEnabled=false;
+  const layerOff=document.createElement('canvas');layerOff.width=S.cw;layerOff.height=S.ch;
+  const layerOffCtx=layerOff.getContext('2d');layerOffCtx.imageSmoothingEnabled=false;
+
+  for(let ci=0;ci<cuts.length;ci++){
+    const cut=cuts[ci];const cutNum=String(ci+1).padStart(3,'0');
+    const cutName='C-'+cutNum;
+    const folder=zip.folder(pn+'_'+cutName);
+    for(let fi=0;fi<cut.totalFrames;fi++){
+      offCtx.clearRect(0,0,S.cw,S.ch);
+      for(let li=0;li<LAYER_DEFS.length;li++){
+        if(!layerVis[li])continue;layerOffCtx.clearRect(0,0,S.cw,S.ch);
+        const isDraft=LAYER_DEFS[li].type==='draft';
+        // 持続フレーム対応
+        const dur=cut.frameDur||{};
+        let eidx=fi;
+        for(let f=fi;f>=0;f--){const d=dur[li+'-'+f]||1;if(d>1&&fi>=f&&fi<=f+d-1){eidx=f;break;}}
+        const fr=cut.layers[li].frames[eidx];if(!fr)continue;
+        if(fr.draftImg){await new Promise(res=>{const img=new Image();img.onload=()=>{layerOffCtx.drawImage(img,0,0,S.cw,S.ch);res();};img.src=fr.draftImg;});}
+        drawStrokes(layerOffCtx,fr.strokes);if(!isDraft)binarizeCanvas(layerOffCtx,S.cw,S.ch);
+        if(isDraft){offCtx.globalAlpha=draftOpacity;offCtx.drawImage(layerOff,0,0);offCtx.globalAlpha=1;}
+        else{offCtx.drawImage(layerOff,0,0);}
+      }
+      const frameNum=String(fi).padStart(4,'0');
+      const filename=cutName+'_'+frameNum+'.png';
+      const dataUrl=offscreen.toDataURL('image/png');
+      const base64Data=dataUrl.split(',')[1];
+      folder.file(filename,base64Data,{base64:true});
+      done++;fill.style.width=Math.round(done/totalCount*100)+'%';text.textContent=`${done} / ${totalCount}`;
+      if(done%4===0)await new Promise(r=>setTimeout(r,10));
+    }
+  }
+  text.textContent='ZIP圧縮中...';
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=pn+'_png.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  prog.style.display='none';notify(`${totalCount}枚のPNGをZIP出力`);
+}
+
+// ===========================================================
+function notify(msg){const el=document.getElementById('notification');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.display='none';},2500);}
+window.addEventListener('load',init);
+</script>
+</body>
+</html>
