@@ -141,6 +141,9 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 #zoom-indicator{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:var(--text-primary);padding:4px 12px;border-radius:4px;font-size:11px;z-index:50;}
 #stroke-order-overlay{position:absolute;top:0;left:0;pointer-events:none;z-index:10;}
 #point-edit-overlay{position:absolute;top:0;left:0;pointer-events:none;z-index:6;}
+#view-tools{display:flex;align-items:center;gap:3px;}
+.view-tool-btn{font-size:16px !important;}
+.view-tool-btn.active{background:var(--accent) !important;color:#fff !important;}
 #frame-guide-overlay{position:absolute;pointer-events:none;z-index:8;border:2px solid rgba(0,180,255,0.7);box-sizing:border-box;display:none;box-shadow:0 0 0 9999px rgba(0,0,0,0.25);}
 
 #right-panel{width:220px;background:var(--bg-panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
@@ -170,8 +173,8 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 .cut-item .cut-frames{font-size:9px;color:var(--text-muted);}
 .cut-actions{display:flex;gap:4px;padding:4px 6px;}
 
-#timeline-panel{position:fixed;bottom:0;left:44px;right:220px;height:180px;background:var(--bg-panel);border-top:1px solid var(--border);display:flex;flex-direction:column;z-index:20;}
-#timeline-controls{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg-secondary);border-bottom:1px solid var(--border);height:32px;}
+#timeline-panel{position:fixed;bottom:0;left:44px;right:220px;background:var(--bg-panel);border-top:1px solid var(--border);display:flex;flex-direction:column;z-index:20;}
+#timeline-controls{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg-secondary);border-bottom:1px solid var(--border);min-height:32px;flex-shrink:0;flex-wrap:wrap;}
 .tl-btn{width:26px;height:26px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-secondary);border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;}
 .tl-btn:hover{background:var(--bg-tertiary);color:var(--text-primary);}
 .tl-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -179,7 +182,8 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 .tl-info span{color:var(--text-primary);font-weight:600;}
 #fps-input{width:36px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;font-size:11px;border-radius:3px;text-align:center;}
 #timeline-body{flex:1;display:flex;overflow:hidden;}
-#tl-layer-labels{width:100px;background:var(--bg-secondary);border-right:1px solid var(--border);overflow-y:auto;}
+#tl-layer-labels{width:100px;background:var(--bg-secondary);border-right:1px solid var(--border);overflow:hidden;flex-shrink:0;}
+#tl-layer-labels-inner{padding-top:18px;}
 .tl-layer-label{height:24px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-secondary);border-bottom:1px solid var(--border);cursor:pointer;}
 .tl-layer-label.active{color:var(--text-primary);background:var(--bg-tertiary);}
 .tl-layer-label .dot{width:6px;height:6px;border-radius:50%;margin-right:6px;flex-shrink:0;}
@@ -236,7 +240,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   #toolbar{flex-direction:row;width:100%;height:40px;overflow-x:auto;overflow-y:hidden;}
   #right-panel{width:100%;max-height:200px;overflow-y:auto;flex-direction:row;flex-wrap:wrap;}
   #right-panel .panel-section{min-width:180px;flex:1;}
-  #timeline-panel{left:0;right:0;height:140px;}
+  #timeline-panel{left:0;right:0;}
   #canvas-area{min-height:300px;}
   #header{flex-wrap:wrap;height:auto;padding:4px 8px;}
   .header-btn{padding:4px 8px;font-size:10px;}
@@ -244,7 +248,6 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 }
 @media(max-width:600px){
   #right-panel{max-height:160px;}
-  #timeline-panel{height:120px;}
   .tl-cell{width:22px;min-width:22px;height:20px;}
   .tl-frame-num{width:22px;min-width:22px;}
 }
@@ -385,9 +388,19 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <button class="tl-btn" onclick="toggleOnionSkin()" title="オニオンスキン" style="font-size:10px;">🧅</button>
     <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
     <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
+    <div class="header-sep"></div>
+    <div id="view-tools">
+      <button class="header-btn view-tool-btn" id="vt-pan" onclick="setViewTool('pan')">✋画面移動</button>
+      <button class="header-btn view-tool-btn" id="vt-rotate" onclick="setViewTool('rotate')">🔁キャンバス回転</button>
+      <button class="header-btn view-tool-btn" id="vt-reset-rot" onclick="S.rot=0;updateTransform();">🔂回転リセット</button>
+      <button class="header-btn view-tool-btn" id="vt-fit" onclick="centerCanvas()">🪟フィット</button>
+      <span style="font-size:11px;">🔍</span>
+      <input type="range" id="zoom-slider" min="10" max="500" value="100" title="ズーム" style="width:120px;" oninput="applyZoomSlider(this.value)">
+      <span id="zoom-slider-val" style="font-size:10px;color:var(--text-secondary);min-width:28px;">100%</span>
+    </div>
   </div>
   <div id="timeline-body">
-    <div id="tl-layer-labels"></div>
+    <div id="tl-layer-labels"><div id="tl-layer-labels-inner"></div></div>
     <div id="tl-frames-area"><div id="tl-header"></div><div id="tl-rows"></div></div>
   </div>
 </div>
@@ -459,6 +472,7 @@ let spaceHeld=false,ctrlHeld=false;
 let draftImgCache={};let strokeGuideVisible=false;
 let draftOpacity=0.4; // 下書きレイヤー不透明度
 let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
+let viewTool=''; // '' | 'pan' | 'rotate' （空=通常描画モード）
 
 // クリップボード（フレームコピー用）
 let clipFrame=null;       // 単一レイヤー {strokes, draftImg}
@@ -542,8 +556,48 @@ function createCanvases(){
   overlayCanvas=document.getElementById('stroke-order-overlay');overlayCanvas.width=S.cw;overlayCanvas.height=S.ch;overlayCtx=overlayCanvas.getContext('2d');
   for(let i=0;i<LAYER_DEFS.length;i++){const c=document.createElement('canvas');c.className='canvas-layer';c.width=S.cw;c.height=S.ch;c.style.width=S.cw+'px';c.style.height=S.ch+'px';ct.appendChild(c);layerCanvases.push(c);const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;layerCtxs.push(ctx);}
 }
-function centerCanvas(){const a=document.getElementById('canvas-area').getBoundingClientRect();S.panX=(a.width-S.cw*S.zoom)/2;S.panY=(a.height-180-S.ch*S.zoom)/2;updateTransform();}
-function updateTransform(){document.getElementById('canvas-container').style.transform=`translate(${S.panX}px,${S.panY}px) rotate(${S.rot}deg) scale(${S.zoom})`;document.getElementById('zoom-indicator').textContent=Math.round(S.zoom*100)+'%';}
+function centerCanvas(){
+  const a=document.getElementById('canvas-area').getBoundingClientRect();
+  const tlPanel=document.getElementById('timeline-panel');
+  const tlH=tlPanel?tlPanel.offsetHeight:0;
+  const viewH=a.height-tlH;
+  const viewW=a.width;
+  // 縦幅にフィット（タイムラインの手前まで）
+  const fitZoom=viewH/S.ch;
+  S.zoom=fitZoom;
+  S.rot=0;
+  S.panX=(viewW-S.cw*S.zoom)/2;
+  S.panY=0;
+  updateTransform();
+}
+function updateTransform(){
+  // キャンバス中心を軸に回転: translate(pan) → translate(center) → rotate → translate(-center) → scale
+  const cx=S.cw*S.zoom/2, cy=S.ch*S.zoom/2;
+  document.getElementById('canvas-container').style.transform=
+    `translate(${S.panX}px,${S.panY}px) translate(${cx}px,${cy}px) rotate(${S.rot}deg) translate(${-cx}px,${-cy}px) scale(${S.zoom})`;
+  document.getElementById('zoom-indicator').textContent=Math.round(S.zoom*100)+'%';
+  const zs=document.getElementById('zoom-slider');
+  if(zs)zs.value=Math.round(S.zoom*100);
+  const zv=document.getElementById('zoom-slider-val');
+  if(zv)zv.textContent=Math.round(S.zoom*100)+'%';
+}
+
+function setViewTool(t){
+  viewTool=(viewTool===t)?'':t;
+  document.querySelectorAll('.view-tool-btn').forEach(b=>b.classList.remove('active'));
+  if(viewTool==='pan')document.getElementById('vt-pan').classList.add('active');
+  if(viewTool==='rotate')document.getElementById('vt-rotate').classList.add('active');
+}
+function applyZoomSlider(v){
+  const newZoom=Math.max(0.1,Math.min(10,v/100));
+  const a=document.getElementById('canvas-area').getBoundingClientRect();
+  const cx=a.width/2,cy=a.height/2;
+  const oldZoom=S.zoom;
+  S.panX=cx-(cx-S.panX)*(newZoom/oldZoom);
+  S.panY=cy-(cy-S.panY)*(newZoom/oldZoom);
+  S.zoom=newZoom;
+  updateTransform();
+}
 
 // ===========================================================
 // イベント
@@ -552,47 +606,120 @@ function setupEvents(){
   const area=document.getElementById('canvas-area');
   area.addEventListener('mousedown',onDown);area.addEventListener('mousemove',onMove);area.addEventListener('mouseup',onUp);area.addEventListener('mouseleave',onUp);
   area.addEventListener('wheel',onWheel,{passive:false});area.addEventListener('contextmenu',e=>e.preventDefault());
-  // タッチイベント → マウスイベント変換
-  let touchId=null;
+
+  // タッチイベント：スタイラス(pen)のみ描画、指(touch)はビュー操作
+  let stylusId=null;
+  let fingerTouches=[];  // 指タッチ管理
+  let lastFingerPos=null; // 1本指パン用
+  let lastPinchDist=0,lastPinchAngle=0,lastPinchCenter=null;
+
   area.addEventListener('touchstart',e=>{
-    if(touchId!==null)return;
-    const t=e.touches[0];touchId=t.identifier;
     e.preventDefault();
-    onDown({clientX:t.clientX,clientY:t.clientY,button:0,preventDefault(){}});
-  },{passive:false});
-  area.addEventListener('touchmove',e=>{
     for(const t of e.changedTouches){
-      if(t.identifier===touchId){e.preventDefault();onMove({clientX:t.clientX,clientY:t.clientY,preventDefault(){}});break;}
-    }
-  },{passive:false});
-  const touchEnd=e=>{
-    for(const t of e.changedTouches){
-      if(t.identifier===touchId){touchId=null;onUp({clientX:t.clientX,clientY:t.clientY,preventDefault(){}});break;}
-    }
-  };
-  area.addEventListener('touchend',touchEnd);area.addEventListener('touchcancel',touchEnd);
-  // 2本指ピンチ拡縮
-  let lastPinchDist=0;
-  area.addEventListener('touchstart',e=>{
-    if(e.touches.length===2){
-      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-      lastPinchDist=Math.sqrt(dx*dx+dy*dy);
-    }
-  },{passive:true});
-  area.addEventListener('touchmove',e=>{
-    if(e.touches.length===2){
-      e.preventDefault();
-      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-      const dist=Math.sqrt(dx*dx+dy*dy);
-      if(lastPinchDist>0){
-        const scale=dist/lastPinchDist;
-        S.zoom=Math.max(0.1,Math.min(10,S.zoom*scale));
-        updateTransform();
+      if(t.touchType==='stylus'||e.touches.length===1&&(t.radiusX<5&&t.radiusY<5)){
+        // スタイラス判定（touchType対応ブラウザ or 小さい接触面積）
+        // PointerEventsで補完するため、ここでは簡易判定
       }
-      lastPinchDist=dist;
     }
+    // PointerEventsに委譲（下のpointerイベントで処理）
   },{passive:false});
-  area.addEventListener('touchend',e=>{if(e.touches.length<2)lastPinchDist=0;},{passive:true});
+
+  // PointerEvents：pen/mouse → 描画、touch → ビュー操作
+  let pointerId=null;
+  area.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='touch'){
+      // 指タッチ → ビュー操作
+      fingerTouches.push({id:e.pointerId,x:e.clientX,y:e.clientY});
+      if(fingerTouches.length===1){
+        lastFingerPos={x:e.clientX,y:e.clientY};
+      }else if(fingerTouches.length===2){
+        // ピンチ/回転開始
+        const dx=fingerTouches[0].x-fingerTouches[1].x,dy=fingerTouches[0].y-fingerTouches[1].y;
+        lastPinchDist=Math.sqrt(dx*dx+dy*dy);
+        lastPinchAngle=Math.atan2(dy,dx);
+        lastPinchCenter={x:(fingerTouches[0].x+fingerTouches[1].x)/2,y:(fingerTouches[0].y+fingerTouches[1].y)/2};
+      }
+      return;
+    }
+    // ペン/マウス → ビューツール確認
+    if(viewTool==='pan'){
+      panning=true;lastMouse={x:e.clientX,y:e.clientY};
+      pointerId=e.pointerId;return;
+    }
+    if(viewTool==='rotate'){
+      rotating=true;lastMouse={x:e.clientX,y:e.clientY};
+      document.getElementById('rotation-indicator').style.display='block';
+      pointerId=e.pointerId;return;
+    }
+    // 通常描画
+    pointerId=e.pointerId;
+    onDown({clientX:e.clientX,clientY:e.clientY,button:e.button,preventDefault(){}});
+  });
+  area.addEventListener('pointermove',e=>{
+    if(e.pointerType==='touch'){
+      // 指の位置更新
+      for(let i=0;i<fingerTouches.length;i++){
+        if(fingerTouches[i].id===e.pointerId){
+          fingerTouches[i].x=e.clientX;fingerTouches[i].y=e.clientY;break;
+        }
+      }
+      if(fingerTouches.length===1&&lastFingerPos){
+        // 1本指パン
+        S.panX+=e.clientX-lastFingerPos.x;S.panY+=e.clientY-lastFingerPos.y;
+        lastFingerPos={x:e.clientX,y:e.clientY};
+        updateTransform();
+      }else if(fingerTouches.length===2){
+        // 2本指ピンチ＋回転
+        const dx=fingerTouches[0].x-fingerTouches[1].x,dy=fingerTouches[0].y-fingerTouches[1].y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        const angle=Math.atan2(dy,dx);
+        const center={x:(fingerTouches[0].x+fingerTouches[1].x)/2,y:(fingerTouches[0].y+fingerTouches[1].y)/2};
+        if(lastPinchDist>0){
+          // ズーム（ピンチ中心基準）
+          const a=document.getElementById('canvas-area').getBoundingClientRect();
+          const mx=center.x-a.left,my=center.y-a.top;
+          const oldZoom=S.zoom;
+          S.zoom=Math.max(0.1,Math.min(10,S.zoom*(dist/lastPinchDist)));
+          S.panX=mx-(mx-S.panX)*(S.zoom/oldZoom);
+          S.panY=my-(my-S.panY)*(S.zoom/oldZoom);
+          // 回転
+          const da=(angle-lastPinchAngle)*180/Math.PI;
+          S.rot+=da;
+          // パン
+          if(lastPinchCenter){
+            S.panX+=center.x-lastPinchCenter.x;
+            S.panY+=center.y-lastPinchCenter.y;
+          }
+          updateTransform();
+        }
+        lastPinchDist=dist;lastPinchAngle=angle;lastPinchCenter=center;
+      }
+      return;
+    }
+    if(e.pointerId!==pointerId)return;
+    if(panning){S.panX+=e.clientX-lastMouse.x;S.panY+=e.clientY-lastMouse.y;lastMouse={x:e.clientX,y:e.clientY};updateTransform();return;}
+    if(rotating){S.rot+=(e.clientX-lastMouse.x)*0.5;lastMouse={x:e.clientX,y:e.clientY};document.getElementById('rotation-indicator').textContent=Math.round(S.rot)+'°';updateTransform();return;}
+    onMove({clientX:e.clientX,clientY:e.clientY,preventDefault(){}});
+  });
+  const pointerUp=e=>{
+    if(e.pointerType==='touch'){
+      fingerTouches=fingerTouches.filter(f=>f.id!==e.pointerId);
+      if(fingerTouches.length<2){lastPinchDist=0;lastPinchAngle=0;lastPinchCenter=null;}
+      if(fingerTouches.length===0)lastFingerPos=null;
+      else if(fingerTouches.length===1)lastFingerPos={x:fingerTouches[0].x,y:fingerTouches[0].y};
+      return;
+    }
+    if(e.pointerId!==pointerId)return;
+    if(panning){panning=false;pointerId=null;return;}
+    if(rotating){rotating=false;document.getElementById('rotation-indicator').style.display='none';pointerId=null;return;}
+    pointerId=null;
+    onUp({clientX:e.clientX,clientY:e.clientY,preventDefault(){}});
+  };
+  area.addEventListener('pointerup',pointerUp);area.addEventListener('pointercancel',pointerUp);
+  area.addEventListener('pointerleave',e=>{if(e.pointerType!=='touch')pointerUp(e);});
+  // タッチのデフォルト動作を完全に抑制
+  area.addEventListener('touchstart',e=>e.preventDefault(),{passive:false});
+  area.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 
   document.addEventListener('keydown',onKeyDown);document.addEventListener('keyup',onKeyUp);
   document.getElementById('pen-size').addEventListener('input',e=>{S.penSize=+e.target.value;document.getElementById('pen-size-val').textContent=S.penSize;});
@@ -615,20 +742,27 @@ function setupEvents(){
 }
 function getPos(e){
   const a=document.getElementById('canvas-area').getBoundingClientRect();
-  // area内座標
   const ax=e.clientX-a.left,ay=e.clientY-a.top;
-  // translate逆
+  // CSS: translate(pan) → translate(cx,cy) → rotate → translate(-cx,-cy) → scale
+  // 逆順: scale⁻¹ → translate(cx,cy) → rotate⁻¹ → translate(-cx,-cy) → translate(-pan)
+  // step1: translate(pan)逆
   const tx=ax-S.panX,ty=ay-S.panY;
-  // rotate逆（原点0,0中心、transform-origin:0 0 に対応）
+  // step2: translate(cx,cy)逆
+  const cx=S.cw*S.zoom/2, cy=S.ch*S.zoom/2;
+  const rx=tx-cx,ry=ty-cy;
+  // step3: rotate逆
   const rad=-S.rot*Math.PI/180,cos=Math.cos(rad),sin=Math.sin(rad);
-  const rx=cos*tx-sin*ty,ry=sin*tx+cos*ty;
-  // scale逆
-  return{x:rx/S.zoom,y:ry/S.zoom};
+  const rrx=cos*rx-sin*ry,rry=sin*rx+cos*ry;
+  // step4: translate(-cx,-cy)逆 → +cx,+cy
+  const sx=rrx+cx,sy=rry+cy;
+  // step5: scale逆
+  return{x:sx/S.zoom,y:sy/S.zoom};
 }
 function onDown(e){
   if(e.button===1){panning=true;lastMouse={x:e.clientX,y:e.clientY};return;}
   if(spaceHeld&&ctrlHeld){rotating=true;lastMouse={x:e.clientX,y:e.clientY};document.getElementById('rotation-indicator').style.display='block';return;}
-  if(spaceHeld){panning=true;lastMouse={x:e.clientX,y:e.clientY};return;}
+  if(spaceHeld||viewTool==='pan'){panning=true;lastMouse={x:e.clientX,y:e.clientY};return;}
+  if(viewTool==='rotate'){rotating=true;lastMouse={x:e.clientX,y:e.clientY};document.getElementById('rotation-indicator').style.display='block';return;}
   if(e.button!==0)return;const p=getPos(e);
 
   // ポイント編集ツール
@@ -669,7 +803,10 @@ function onUp(e){
 
   if(!drawing)return;drawing=false;const fr=CF()[S.layer].frames[S.frame];
   if(S.tool==='pen'&&curPoints.length>=2){const sm=smoothPoints(curPoints);fr.strokes.push({type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
-  else if(S.tool==='eraser'&&curPoints.length>=2){const sm=smoothPoints(curPoints);fr.strokes.push({type:'eraser',controls:toBezier(sm),size:S.penSize*3,order:fr.strokes.length});}
+  else if(S.tool==='eraser'&&curPoints.length>=2){
+    // 消しゴム：ストロークのパスを直接削除する方式
+    applyEraserToStrokes(fr,curPoints,S.penSize*3);
+  }
   else if(S.tool==='line'&&shapeStart){fr.strokes.push({type:'line',x1:shapeStart.x,y1:shapeStart.y,x2:p.x,y2:p.y,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
   else if(S.tool==='circle'&&shapeStart){fr.strokes.push({type:'ellipse',cx:(shapeStart.x+p.x)/2,cy:(shapeStart.y+p.y)/2,rx:Math.abs(p.x-shapeStart.x)/2,ry:Math.abs(p.y-shapeStart.y)/2,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
   else if(S.tool==='rect'&&shapeStart){fr.strokes.push({type:'rect',x:Math.min(shapeStart.x,p.x),y:Math.min(shapeStart.y,p.y),w:Math.abs(p.x-shapeStart.x),h:Math.abs(p.y-shapeStart.y),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
@@ -831,6 +968,153 @@ function toBezier(pts){
 }
 
 // ===========================================================
+// 消しゴム：ストロークのパスを直接削除する方式
+// ===========================================================
+function applyEraserToStrokes(fr,eraserPts,eraserSize){
+  // 消しゴムパスをサンプリングして点列化
+  const ePts=[];
+  for(let i=0;i<eraserPts.length;i++){
+    ePts.push({x:eraserPts[i].x,y:eraserPts[i].y});
+    if(i<eraserPts.length-1){
+      // 中間点も追加（密なサンプリング）
+      const a=eraserPts[i],b=eraserPts[i+1];
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      const step=eraserSize/3;
+      if(d>step){
+        const n=Math.ceil(d/step);
+        for(let j=1;j<n;j++){ePts.push({x:a.x+dx*j/n,y:a.y+dy*j/n});}
+      }
+    }
+  }
+  const r=eraserSize/2;
+  const r2=r*r;
+  const newStrokes=[];
+  for(const s of fr.strokes){
+    if(s.type==='eraser')continue; // 既存のeraserストロークは無視（旧データ互換）
+    if(s.type==='bezier'&&s.controls&&s.controls.length>0){
+      // ベジェストロークをセグメントごとに判定
+      const surviving=eraseBezierSegments(s.controls,ePts,r2,s.size);
+      for(const seg of surviving){
+        if(seg.length>0){
+          newStrokes.push({type:'bezier',controls:seg,color:s.color,size:s.size,order:newStrokes.length});
+        }
+      }
+    }else if(s.type==='line'){
+      // 直線：サンプリングして消しゴムとの交差判定
+      const pts=sampleLine(s.x1,s.y1,s.x2,s.y2,r);
+      const surviving=erasePointSequence(pts,ePts,r2,s.size);
+      for(const seg of surviving){
+        if(seg.length>=2){
+          newStrokes.push({type:'line',x1:seg[0].x,y1:seg[0].y,x2:seg[seg.length-1].x,y2:seg[seg.length-1].y,color:s.color,size:s.size,order:newStrokes.length});
+        }
+      }
+    }else if(s.type==='ellipse'){
+      // 楕円：消しゴムが楕円の中心付近に触れたら削除
+      const hit=ePts.some(p=>{
+        const dx=p.x-s.cx,dy=p.y-s.cy;
+        return dx*dx+dy*dy<(Math.max(s.rx,s.ry)+r)*(Math.max(s.rx,s.ry)+r);
+      });
+      if(!hit)newStrokes.push({...s,order:newStrokes.length});
+    }else if(s.type==='rect'){
+      // 矩形：消しゴムが矩形領域に触れたら削除
+      const hit=ePts.some(p=>p.x+r>s.x&&p.x-r<s.x+s.w&&p.y+r>s.y&&p.y-r<s.y+s.h);
+      if(!hit)newStrokes.push({...s,order:newStrokes.length});
+    }else{
+      newStrokes.push({...s,order:newStrokes.length});
+    }
+  }
+  fr.strokes=newStrokes;
+}
+
+function eraseBezierSegments(controls,ePts,r2,strokeSize){
+  // 各ベジェセグメントをサンプリングし、消しゴムに触れた箇所で分割
+  // まず全セグメントをポイント列化
+  const allPts=[];
+  const segBounds=[]; // 各制御点の先頭ポイントindex
+  for(let i=0;i<controls.length;i++){
+    const c=controls[i];
+    segBounds.push(allPts.length);
+    const steps=8;
+    for(let t=0;t<=steps;t++){
+      const tt=t/steps;
+      const u=1-tt;
+      const x=u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex;
+      const y=u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey;
+      // 重複回避
+      if(allPts.length>0&&t===0)continue;
+      allPts.push({x,y,ci:i,t:tt});
+    }
+  }
+  // 各ポイントが消しゴムに触れているか判定
+  const halfStroke=strokeSize/2;
+  const hitRadius2=(Math.sqrt(r2)+halfStroke)*(Math.sqrt(r2)+halfStroke);
+  const erased=new Array(allPts.length).fill(false);
+  for(let i=0;i<allPts.length;i++){
+    const p=allPts[i];
+    for(const ep of ePts){
+      const dx=p.x-ep.x,dy=p.y-ep.y;
+      if(dx*dx+dy*dy<hitRadius2){erased[i]=true;break;}
+    }
+  }
+  // 連続する非消去区間を抽出
+  const segments=[];
+  let start=-1;
+  for(let i=0;i<=allPts.length;i++){
+    if(i<allPts.length&&!erased[i]){
+      if(start===-1)start=i;
+    }else{
+      if(start!==-1){
+        // start..i-1 が残るセグメント
+        const pts=allPts.slice(start,i);
+        if(pts.length>=2){
+          // ポイント列からベジェ制御点を再構築
+          const rawPts=pts.map(p=>({x:p.x,y:p.y}));
+          segments.push(toBezier(rawPts));
+        }
+        start=-1;
+      }
+    }
+  }
+  return segments;
+}
+
+function sampleLine(x1,y1,x2,y2,r){
+  const dx=x2-x1,dy=y2-y1;
+  const d=Math.sqrt(dx*dx+dy*dy);
+  const step=r/2;
+  const n=Math.max(2,Math.ceil(d/step));
+  const pts=[];
+  for(let i=0;i<=n;i++){
+    pts.push({x:x1+dx*i/n,y:y1+dy*i/n});
+  }
+  return pts;
+}
+
+function erasePointSequence(pts,ePts,r2,strokeSize){
+  const halfStroke=strokeSize/2;
+  const hitRadius2=(Math.sqrt(r2)+halfStroke)*(Math.sqrt(r2)+halfStroke);
+  const erased=new Array(pts.length).fill(false);
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    for(const ep of ePts){
+      const dx=p.x-ep.x,dy=p.y-ep.y;
+      if(dx*dx+dy*dy<hitRadius2){erased[i]=true;break;}
+    }
+  }
+  const segments=[];
+  let start=-1;
+  for(let i=0;i<=pts.length;i++){
+    if(i<pts.length&&!erased[i]){
+      if(start===-1)start=i;
+    }else{
+      if(start!==-1){segments.push(pts.slice(start,i));start=-1;}
+    }
+  }
+  return segments;
+}
+
+// ===========================================================
 // 描画
 // ===========================================================
 function renderAll(){
@@ -881,7 +1165,12 @@ function renderLayer(li,fi){
   ctx.clearRect(0,0,S.cw,S.ch);
   drawStrokes(ctx,fr.strokes);if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
 }
-function drawStrokes(ctx,strokes){for(const s of strokes)drawStroke(ctx,s);}
+function drawStrokes(ctx,strokes){
+  for(const s of strokes){
+    if(s.type==='eraser')continue; // 旧データ互換：eraserストロークは無視
+    drawStroke(ctx,s);
+  }
+}
 function drawStroke(ctx,s){
   ctx.lineCap='square';ctx.lineJoin='miter';
   if(s.type==='bezier'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();if(s.controls.length>0){ctx.moveTo(s.controls[0].sx,s.controls[0].sy);for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);}ctx.stroke();}
@@ -1629,7 +1918,7 @@ function duplicateFrame(){pushUndo();const nf=S.frame+1;if(nf<CTF()){CF()[S.laye
 function updateTimeline(){
   const tf=CTF();const hd=document.getElementById('tl-header');hd.innerHTML='';
   for(let f=0;f<tf;f++){const d=document.createElement('div');d.className='tl-frame-num'+(f===S.frame?' current':'');d.textContent=f+1;d.onclick=()=>goToFrame(f);hd.appendChild(d);}
-  const lb=document.getElementById('tl-layer-labels');lb.innerHTML='';
+  const lb=document.getElementById('tl-layer-labels-inner');lb.innerHTML='';
   for(let i=0;i<LAYER_DEFS.length;i++){const d=document.createElement('div');d.className='tl-layer-label'+(i===S.layer?' active':'');d.onclick=()=>{S.layer=i;updateLayerList();updateTimeline();renderAll();};const dot=document.createElement('span');dot.className='dot';dot.style.background=LAYER_DEFS[i].color;d.appendChild(dot);d.appendChild(document.createTextNode(LAYER_DEFS[i].name));lb.appendChild(d);}
   const rows=document.getElementById('tl-rows');rows.innerHTML='';
   for(let i=0;i<LAYER_DEFS.length;i++){
@@ -1669,6 +1958,25 @@ function updateTimeline(){
   document.getElementById('current-frame-display').textContent=S.frame+1;
   document.getElementById('total-frame-display').textContent=tf;
   document.getElementById('info-frames').value=tf;
+  // タイムライン高さを全レイヤー表示に合わせて動的計算
+  updateTimelineHeight();
+  // スクロール同期
+  setupTimelineScrollSync();
+}
+function updateTimelineHeight(){
+  // コントロール行（実際の高さ）+ ヘッダー(18) + 全レイヤー行(24*N) + 余白(4)
+  const ctrl=document.getElementById('timeline-controls');
+  const ctrlH=ctrl?ctrl.offsetHeight:32;
+  const h=ctrlH+18+LAYER_DEFS.length*24+4;
+  document.getElementById('timeline-panel').style.height=h+'px';
+}
+function setupTimelineScrollSync(){
+  const framesArea=document.getElementById('tl-frames-area');
+  const labelsEl=document.getElementById('tl-layer-labels');
+  // 縦スクロール同期：フレームエリアのスクロールに合わせてラベルも動く
+  framesArea.onscroll=()=>{
+    labelsEl.scrollTop=framesArea.scrollTop;
+  };
 }
 function goToFrame(f){if(f<0||f>=CTF())return;S.frame=f;updateTimeline();renderAll();}
 
