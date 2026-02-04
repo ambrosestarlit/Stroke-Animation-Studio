@@ -134,7 +134,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 #canvas-container{position:absolute;transform-origin:0 0;}
 .canvas-layer{position:absolute;top:0;left:0;}
 #canvas-bg{position:absolute;top:0;left:0;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.5);}
-#onion-canvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0.3;}
+#onion-canvas{position:absolute;top:0;left:0;pointer-events:none;opacity:1;}
 #stroke-guide-canvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
 #cursor-preview{position:fixed;pointer-events:none;border:1.5px solid rgba(233,69,96,0.7);border-radius:50%;z-index:100;display:none;}
 #rotation-indicator{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:var(--text-primary);padding:4px 12px;border-radius:4px;font-size:12px;display:none;z-index:50;}
@@ -326,8 +326,9 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="panel-section">
       <div class="panel-header">レイヤー</div>
       <div class="panel-body" id="layer-list"></div>
-      <div class="layer-actions"><button class="layer-action-btn" onclick="clearCurrentLayer()">クリア</button><button class="layer-action-btn" onclick="duplicateFrame()">複製</button></div>
+      <div class="layer-actions"><button class="layer-action-btn" onclick="clearCurrentLayer()">クリア</button><button class="layer-action-btn" onclick="clearAllLayers()">全クリア</button><button class="layer-action-btn" onclick="duplicateFrame()">複製</button></div>
       <div class="onion-row" style="margin-top:4px;"><label>下書き不透明度</label><input type="range" id="draft-opacity" min="0" max="100" value="40" style="width:60px;" oninput="draftOpacity=this.value/100;document.getElementById('draft-opacity-val').textContent=this.value+'%';renderAll();"><span id="draft-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">40%</span></div>
+      <div class="onion-row"><label>オニオン不透明度</label><input type="range" id="onion-opacity" min="0" max="100" value="100" style="width:60px;" oninput="document.getElementById('onion-canvas').style.opacity=this.value/100;document.getElementById('onion-opacity-val').textContent=this.value+'%';"><span id="onion-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">100%</span></div>
     </div>
     <div class="panel-section">
       <div class="panel-header">オニオンスキン</div>
@@ -385,7 +386,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="header-sep"></div>
     <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
     <div class="header-sep"></div>
-    <button class="header-btn" onclick="toggleOnionSkin()" title="オニオンスキン" style="font-size:10px;">🧅オニオンスキン</button>
+    <button class="header-btn" onclick="clearCurrentLayer()">🗑️ クリア</button>
+    <button class="header-btn" onclick="clearAllLayers()">🗑️ 全クリア</button>
+    <div class="header-sep"></div>
+    <button class="header-btn" onclick="toggleOnionSkin()" title="オニオンスキン">🧅 オニオンスキン</button>
     <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
     <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
     <div class="header-sep"></div>
@@ -772,7 +776,8 @@ function onDown(e){
   // 移動ツール
   if(S.tool==='move'){onDownMove(p,e);return;}
 
-  if(S.tool==='pen'||S.tool==='eraser'){drawing=true;curPoints=[{x:p.x,y:p.y}];pushUndo();drawingSnapshot=layerCtxs[S.layer].getImageData(0,0,S.cw,S.ch);}
+  if(S.tool==='pen'){drawing=true;curPoints=[{x:p.x,y:p.y}];pushUndo();drawingSnapshot=layerCtxs[S.layer].getImageData(0,0,S.cw,S.ch);}
+  else if(S.tool==='eraser'){drawing=true;curPoints=[{x:p.x,y:p.y}];pushUndo();drawingSnapshot=null;}
   else if(S.tool==='line'||S.tool==='circle'||S.tool==='rect'){drawing=true;shapeStart={x:p.x,y:p.y};pushUndo();drawingSnapshot=layerCtxs[S.layer].getImageData(0,0,S.cw,S.ch);}
 }
 function onMove(e){
@@ -971,54 +976,54 @@ function toBezier(pts){
 // 消しゴム：ストロークのパスを直接削除する方式
 // ===========================================================
 function applyEraserToStrokes(fr,eraserPts,eraserSize){
-  // 消しゴムパスをサンプリングして点列化
+  if(eraserPts.length<2)return;
+  // 消しゴムパスをサンプリング（粗め）
   const ePts=[];
+  const step=Math.max(eraserSize/2,4);
   for(let i=0;i<eraserPts.length;i++){
-    ePts.push({x:eraserPts[i].x,y:eraserPts[i].y});
+    ePts.push(eraserPts[i]);
     if(i<eraserPts.length-1){
-      // 中間点も追加（密なサンプリング）
       const a=eraserPts[i],b=eraserPts[i+1];
       const dx=b.x-a.x,dy=b.y-a.y;
       const d=Math.sqrt(dx*dx+dy*dy);
-      const step=eraserSize/3;
       if(d>step){
         const n=Math.ceil(d/step);
-        for(let j=1;j<n;j++){ePts.push({x:a.x+dx*j/n,y:a.y+dy*j/n});}
+        for(let j=1;j<n;j++)ePts.push({x:a.x+dx*j/n,y:a.y+dy*j/n});
       }
     }
   }
   const r=eraserSize/2;
-  const r2=r*r;
+  // グリッド空間インデックス構築
+  const cellSize=r*2||20;
+  const grid={};
+  for(const ep of ePts){
+    const gx=Math.floor(ep.x/cellSize),gy=Math.floor(ep.y/cellSize);
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const key=(gx+dx)+','+(gy+dy);
+      if(!grid[key])grid[key]=[];
+      grid[key].push(ep);
+    }
+  }
   const newStrokes=[];
   for(const s of fr.strokes){
-    if(s.type==='eraser')continue; // 既存のeraserストロークは無視（旧データ互換）
+    if(s.type==='eraser')continue;
     if(s.type==='bezier'&&s.controls&&s.controls.length>0){
-      // ベジェストロークをセグメントごとに判定
-      const surviving=eraseBezierSegments(s.controls,ePts,r2,s.size);
+      const surviving=eraseBezierSegments(s.controls,grid,cellSize,r,s.size);
       for(const seg of surviving){
-        if(seg.length>0){
-          newStrokes.push({type:'bezier',controls:seg,color:s.color,size:s.size,order:newStrokes.length});
-        }
+        if(seg.length>0)newStrokes.push({type:'bezier',controls:seg,color:s.color,size:s.size,order:newStrokes.length});
       }
     }else if(s.type==='line'){
-      // 直線：サンプリングして消しゴムとの交差判定
       const pts=sampleLine(s.x1,s.y1,s.x2,s.y2,r);
-      const surviving=erasePointSequence(pts,ePts,r2,s.size);
+      const surviving=erasePointSequence(pts,grid,cellSize,r,s.size);
       for(const seg of surviving){
-        if(seg.length>=2){
-          newStrokes.push({type:'line',x1:seg[0].x,y1:seg[0].y,x2:seg[seg.length-1].x,y2:seg[seg.length-1].y,color:s.color,size:s.size,order:newStrokes.length});
-        }
+        if(seg.length>=2)newStrokes.push({type:'line',x1:seg[0].x,y1:seg[0].y,x2:seg[seg.length-1].x,y2:seg[seg.length-1].y,color:s.color,size:s.size,order:newStrokes.length});
       }
     }else if(s.type==='ellipse'){
-      // 楕円：消しゴムが楕円の中心付近に触れたら削除
-      const hit=ePts.some(p=>{
-        const dx=p.x-s.cx,dy=p.y-s.cy;
-        return dx*dx+dy*dy<(Math.max(s.rx,s.ry)+r)*(Math.max(s.rx,s.ry)+r);
-      });
+      const hit=isHitGrid(grid,cellSize,s.cx,s.cy,Math.max(s.rx,s.ry)+r);
       if(!hit)newStrokes.push({...s,order:newStrokes.length});
     }else if(s.type==='rect'){
-      // 矩形：消しゴムが矩形領域に触れたら削除
-      const hit=ePts.some(p=>p.x+r>s.x&&p.x-r<s.x+s.w&&p.y+r>s.y&&p.y-r<s.y+s.h);
+      const cx=s.x+s.w/2,cy=s.y+s.h/2;
+      const hit=isHitGrid(grid,cellSize,cx,cy,Math.hypot(s.w,s.h)/2+r);
       if(!hit)newStrokes.push({...s,order:newStrokes.length});
     }else{
       newStrokes.push({...s,order:newStrokes.length});
@@ -1026,38 +1031,40 @@ function applyEraserToStrokes(fr,eraserPts,eraserSize){
   }
   fr.strokes=newStrokes;
 }
+function isHitGrid(grid,cellSize,x,y,radius){
+  const gx=Math.floor(x/cellSize),gy=Math.floor(y/cellSize);
+  const key=gx+','+gy;
+  const pts=grid[key];
+  if(!pts)return false;
+  const r2=radius*radius;
+  for(const ep of pts){const dx=x-ep.x,dy=y-ep.y;if(dx*dx+dy*dy<r2)return true;}
+  return false;
+}
 
-function eraseBezierSegments(controls,ePts,r2,strokeSize){
-  // 各ベジェセグメントをサンプリングし、消しゴムに触れた箇所で分割
-  // まず全セグメントをポイント列化
+function eraseBezierSegments(controls,grid,cellSize,r,strokeSize){
   const allPts=[];
-  const segBounds=[]; // 各制御点の先頭ポイントindex
   for(let i=0;i<controls.length;i++){
     const c=controls[i];
-    segBounds.push(allPts.length);
-    const steps=8;
+    const steps=6;
     for(let t=0;t<=steps;t++){
-      const tt=t/steps;
-      const u=1-tt;
-      const x=u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex;
-      const y=u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey;
-      // 重複回避
-      if(allPts.length>0&&t===0)continue;
-      allPts.push({x,y,ci:i,t:tt});
+      if(i>0&&t===0)continue;
+      const tt=t/steps,u=1-tt;
+      allPts.push({x:u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex,y:u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey});
     }
   }
-  // 各ポイントが消しゴムに触れているか判定
-  const halfStroke=strokeSize/2;
-  const hitRadius2=(Math.sqrt(r2)+halfStroke)*(Math.sqrt(r2)+halfStroke);
-  const erased=new Array(allPts.length).fill(false);
+  const hitR=r+strokeSize/2;
+  const hitR2=hitR*hitR;
+  const erased=new Uint8Array(allPts.length);
   for(let i=0;i<allPts.length;i++){
     const p=allPts[i];
-    for(const ep of ePts){
+    const gx=Math.floor(p.x/cellSize),gy=Math.floor(p.y/cellSize);
+    const pts=grid[gx+','+gy];
+    if(!pts)continue;
+    for(const ep of pts){
       const dx=p.x-ep.x,dy=p.y-ep.y;
-      if(dx*dx+dy*dy<hitRadius2){erased[i]=true;break;}
+      if(dx*dx+dy*dy<hitR2){erased[i]=1;break;}
     }
   }
-  // 連続する非消去区間を抽出
   const segments=[];
   let start=-1;
   for(let i=0;i<=allPts.length;i++){
@@ -1065,12 +1072,15 @@ function eraseBezierSegments(controls,ePts,r2,strokeSize){
       if(start===-1)start=i;
     }else{
       if(start!==-1){
-        // start..i-1 が残るセグメント
-        const pts=allPts.slice(start,i);
+        let pts=allPts.slice(start,i).map(p=>({x:p.x,y:p.y}));
         if(pts.length>=2){
-          // ポイント列からベジェ制御点を再構築
-          const rawPts=pts.map(p=>({x:p.x,y:p.y}));
-          segments.push(toBezier(rawPts));
+          // RDP簡略化でポイント爆発を防止（元の制御点数を超えない）
+          const maxPts=Math.max(controls.length,4);
+          if(pts.length>maxPts){
+            pts=rdp(pts,0.5);
+            if(pts.length>maxPts)pts=resamplePath(pts,maxPts);
+          }
+          segments.push(toBezier(pts));
         }
         start=-1;
       }
@@ -1091,15 +1101,18 @@ function sampleLine(x1,y1,x2,y2,r){
   return pts;
 }
 
-function erasePointSequence(pts,ePts,r2,strokeSize){
-  const halfStroke=strokeSize/2;
-  const hitRadius2=(Math.sqrt(r2)+halfStroke)*(Math.sqrt(r2)+halfStroke);
-  const erased=new Array(pts.length).fill(false);
+function erasePointSequence(pts,grid,cellSize,r,strokeSize){
+  const hitR=r+strokeSize/2;
+  const hitR2=hitR*hitR;
+  const erased=new Uint8Array(pts.length);
   for(let i=0;i<pts.length;i++){
     const p=pts[i];
-    for(const ep of ePts){
+    const gx=Math.floor(p.x/cellSize),gy=Math.floor(p.y/cellSize);
+    const eps=grid[gx+','+gy];
+    if(!eps)continue;
+    for(const ep of eps){
       const dx=p.x-ep.x,dy=p.y-ep.y;
-      if(dx*dx+dy*dy<hitRadius2){erased[i]=true;break;}
+      if(dx*dx+dy*dy<hitR2){erased[i]=1;break;}
     }
   }
   const segments=[];
@@ -1849,7 +1862,7 @@ function renderOnion(){
   for(let d=1;d<=pv;d++){const fi=S.frame-d;if(fi<0)continue;drawOnionFrame(fi,`rgba(233,69,96,${0.25/d})`);}
   for(let d=1;d<=nx;d++){const fi=S.frame+d;if(fi>=CTF())continue;drawOnionFrame(fi,`rgba(78,205,196,${0.25/d})`);}
 }
-function drawOnionFrame(fi,col){for(let li=0;li<4;li++){if(!layerVis[li])continue;const fr=getEffectiveFrame(li,fi);if(!fr)continue;for(const s of fr.strokes){if(s.type==='eraser')continue;drawStroke(onionCtx,{...s,color:col});}}}
+function drawOnionFrame(fi,col){for(let li=0;li<LAYER_DEFS.length;li++){if(!layerVis[li])continue;const fr=getEffectiveFrame(li,fi);if(!fr)continue;if(fr.draftImg){const key='onion-'+li+'-'+fi;if(draftImgCache[key]&&draftImgCache[key].src===fr.draftImg){onionCtx.globalAlpha=0.5;onionCtx.drawImage(draftImgCache[key],0,0,S.cw,S.ch);onionCtx.globalAlpha=1;}else{const img=new Image();img.onload=()=>{draftImgCache[key]=img;onionCtx.globalAlpha=0.5;onionCtx.drawImage(img,0,0,S.cw,S.ch);onionCtx.globalAlpha=1;};img.src=fr.draftImg;}}for(const s of fr.strokes){if(s.type==='eraser')continue;drawStroke(onionCtx,{...s,color:col});}}}
 function toggleOnionSkin(){const cb=document.getElementById('onion-enabled');cb.checked=!cb.checked;renderAll();}
 
 // ===========================================================
@@ -1866,19 +1879,105 @@ function renderStrokeGuide(){
   }
 }
 function drawStrokeGuideAnnotation(ctx,s,num){
-  let sx,sy,ex,ey;
-  if(s.type==='bezier'&&s.controls&&s.controls.length>0){const f=s.controls[0],l=s.controls[s.controls.length-1];sx=f.sx;sy=f.sy;ex=l.ex;ey=l.ey;}
-  else if(s.type==='line'){sx=s.x1;sy=s.y1;ex=s.x2;ey=s.y2;}
-  else if(s.type==='ellipse'){sx=s.cx+s.rx;sy=s.cy;ex=s.cx;ey=s.cy-s.ry;}
-  else if(s.type==='rect'){sx=s.x;sy=s.y;ex=s.x+s.w;ey=s.y;}else return;
-  ctx.save();ctx.fillStyle='rgba(233,69,96,0.85)';ctx.beginPath();ctx.arc(sx,sy-14,9,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(num),sx,sy-14);ctx.restore();
-  const dx=ex-sx,dy=ey-sy,dist=Math.hypot(dx,dy);if(dist<5)return;
-  const arrowLen=Math.min(40,dist*0.6),nx=dx/dist,ny=dy/dist,ax=sx+nx*arrowLen,ay=sy+ny*arrowLen;
-  ctx.save();ctx.strokeStyle='rgba(233,69,96,0.7)';ctx.lineWidth=2;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ax,ay);ctx.stroke();
-  const hl=8,angle=Math.atan2(ay-sy,ax-sx);
-  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax-hl*Math.cos(angle-0.4),ay-hl*Math.sin(angle-0.4));ctx.moveTo(ax,ay);ctx.lineTo(ax-hl*Math.cos(angle+0.4),ay-hl*Math.sin(angle+0.4));ctx.stroke();ctx.restore();
+  // ストロークのパスをサンプリングしてポイント列を取得
+  let pathPts=[];
+  if(s.type==='bezier'&&s.controls&&s.controls.length>0){
+    for(let i=0;i<s.controls.length;i++){
+      const c=s.controls[i];
+      const steps=10;
+      for(let t=0;t<=steps;t++){
+        if(i>0&&t===0)continue;
+        const tt=t/steps,u=1-tt;
+        pathPts.push({x:u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex,y:u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey});
+      }
+    }
+  }else if(s.type==='line'){
+    const n=20;
+    for(let i=0;i<=n;i++)pathPts.push({x:s.x1+(s.x2-s.x1)*i/n,y:s.y1+(s.y2-s.y1)*i/n});
+  }else if(s.type==='ellipse'){
+    const n=40;
+    for(let i=0;i<=n;i++){const a=Math.PI*2*i/n;pathPts.push({x:s.cx+s.rx*Math.cos(a),y:s.cy+s.ry*Math.sin(a)});}
+  }else if(s.type==='rect'){
+    pathPts.push({x:s.x,y:s.y},{x:s.x+s.w,y:s.y},{x:s.x+s.w,y:s.y+s.h},{x:s.x,y:s.y+s.h},{x:s.x,y:s.y});
+  }else return;
+  if(pathPts.length<2)return;
+
+  // 累積距離を計算
+  const dists=[0];
+  for(let i=1;i<pathPts.length;i++){
+    const dx=pathPts[i].x-pathPts[i-1].x,dy=pathPts[i].y-pathPts[i-1].y;
+    dists.push(dists[i-1]+Math.hypot(dx,dy));
+  }
+  const totalLen=dists[dists.length-1];
+  if(totalLen<5)return;
+
+  // 始点の上に番号（丸＋数字）
+  const sp=pathPts[0];
+  // 始点での方向を取得して、パスの反対側にオフセット
+  const nd=Math.min(3,pathPts.length-1);
+  const startDx=pathPts[nd].x-sp.x,startDy=pathPts[nd].y-sp.y;
+  const startDist=Math.hypot(startDx,startDy)||1;
+  const offX=-startDx/startDist*20,offY=-startDy/startDist*20;
+  ctx.save();
+  ctx.strokeStyle='rgba(233,69,96,0.9)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(sp.x+offX,sp.y+offY,10,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='rgba(233,69,96,0.9)';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(String(num),sp.x+offX,sp.y+offY);
+  ctx.restore();
+
+  // パスに沿ってチェブロン（>矢じり）を一定間隔で描画
+  const chevronInterval=Math.max(40,totalLen/6);
+  const chevronSize=Math.min(14,Math.max(8,totalLen*0.04));
+  ctx.save();
+  ctx.strokeStyle='rgba(233,69,96,0.85)';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
+
+  // 最初のチェブロンをパスの1/4あたりから、最後は終点付近
+  let d=chevronInterval*0.5;
+  while(d<totalLen){
+    // dの位置の座標と方向を取得
+    let pi=0;
+    for(let i=1;i<dists.length;i++){if(dists[i]>=d){pi=i;break;}}
+    if(pi===0)pi=dists.length-1;
+    const seg=dists[pi]-dists[pi-1]||1;
+    const t=(d-dists[pi-1])/seg;
+    const px=pathPts[pi-1].x+(pathPts[pi].x-pathPts[pi-1].x)*t;
+    const py=pathPts[pi-1].y+(pathPts[pi].y-pathPts[pi-1].y)*t;
+    // 方向（前後数ポイントで平均化）
+    const lookAhead=Math.min(pi+2,pathPts.length-1);
+    const lookBehind=Math.max(pi-2,0);
+    const dirX=pathPts[lookAhead].x-pathPts[lookBehind].x;
+    const dirY=pathPts[lookAhead].y-pathPts[lookBehind].y;
+    const dirLen=Math.hypot(dirX,dirY)||1;
+    const nx=dirX/dirLen,ny=dirY/dirLen;
+    // チェブロン「>」を描画（進行方向に向く）
+    // 垂直方向
+    const perpX=-ny,perpY=nx;
+    const tipX=px+nx*chevronSize*0.5,tipY=py+ny*chevronSize*0.5;
+    const backX=px-nx*chevronSize*0.5,backY=py-ny*chevronSize*0.5;
+    ctx.beginPath();
+    ctx.moveTo(backX+perpX*chevronSize,backY+perpY*chevronSize);
+    ctx.lineTo(tipX,tipY);
+    ctx.lineTo(backX-perpX*chevronSize,backY-perpY*chevronSize);
+    ctx.stroke();
+
+    d+=chevronInterval;
+  }
+
+  // 終点にも矢じり（大きめ）
+  const ep=pathPts[pathPts.length-1];
+  const ep2=pathPts[Math.max(0,pathPts.length-4)];
+  const edx=ep.x-ep2.x,edy=ep.y-ep2.y;
+  const elen=Math.hypot(edx,edy)||1;
+  const enx=edx/elen,eny=edy/elen;
+  const eperpX=-eny,eperpY=enx;
+  const endSize=chevronSize*1.3;
+  ctx.beginPath();
+  ctx.moveTo(ep.x-enx*endSize+eperpX*endSize,ep.y-eny*endSize+eperpY*endSize);
+  ctx.lineTo(ep.x,ep.y);
+  ctx.lineTo(ep.x-enx*endSize-eperpX*endSize,ep.y-eny*endSize-eperpY*endSize);
+  ctx.stroke();
+
+  ctx.restore();
 }
 function toggleStrokeGuide(){const cb=document.getElementById('stroke-guide-enabled');cb.checked=!cb.checked;renderAll();}
 
@@ -1910,6 +2009,7 @@ function updateLayerList(){
     item.appendChild(dot);item.appendChild(nm);item.appendChild(vis);list.appendChild(item);}
 }
 function clearCurrentLayer(){pushUndo();CF()[S.layer].frames[S.frame]={strokes:[],draftImg:null};renderAll();notify('クリア');}
+function clearAllLayers(){if(!confirm('現在のフレームの全レイヤーをクリアしますか？'))return;pushUndo();for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames[S.frame]={strokes:[],draftImg:null};renderAll();notify('全レイヤークリア');}
 function duplicateFrame(){pushUndo();const nf=S.frame+1;if(nf<CTF()){CF()[S.layer].frames[nf]=JSON.parse(JSON.stringify(CF()[S.layer].frames[S.frame]));goToFrame(nf);notify('フレームを複製');}}
 
 // ===========================================================
