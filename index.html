@@ -987,15 +987,37 @@ function applyEraserToStrokes(fr,eraserPts,eraserSize){
   for(const s of fr.strokes){
     if(s.type==='eraser')continue;
     if(s.type==='bezier'&&s.controls&&s.controls.length>0){
-      const surviving=eraseBezierSegments(s.controls,grid,cellSize,r,s.size);
-      for(const seg of surviving){
-        if(seg.length>0)newStrokes.push({type:'bezier',controls:seg,color:s.color,size:s.size,order:newStrokes.length});
+      // まず消しゴムがこのストロークに実際に触れているかチェック
+      const hitResult=checkBezierHit(s.controls,grid,cellSize,r,s.size);
+      if(!hitResult.anyHit){
+        // 消しゴムが触れていない→そのまま保持
+        newStrokes.push({...s,order:newStrokes.length});
+      }else{
+        // 消しゴムが触れている→分割処理
+        const surviving=eraseBezierSegments(s.controls,grid,cellSize,r,s.size);
+        for(const seg of surviving){
+          if(seg.length>0)newStrokes.push({type:'bezier',controls:seg,color:s.color,size:s.size,order:newStrokes.length});
+        }
       }
     }else if(s.type==='line'){
+      // まず消しゴムが触れているかチェック
       const pts=sampleLine(s.x1,s.y1,s.x2,s.y2,r);
-      const surviving=erasePointSequence(pts,grid,cellSize,r,s.size);
-      for(const seg of surviving){
-        if(seg.length>=2)newStrokes.push({type:'line',x1:seg[0].x,y1:seg[0].y,x2:seg[seg.length-1].x,y2:seg[seg.length-1].y,color:s.color,size:s.size,order:newStrokes.length});
+      const hitR=r+s.size/2;const hitR2=hitR*hitR;
+      let anyHit=false;
+      for(const p of pts){
+        const gx=Math.floor(p.x/cellSize),gy=Math.floor(p.y/cellSize);
+        const eps=grid[gx+','+gy];
+        if(!eps)continue;
+        for(const ep of eps){const dx2=p.x-ep.x,dy2=p.y-ep.y;if(dx2*dx2+dy2*dy2<hitR2){anyHit=true;break;}}
+        if(anyHit)break;
+      }
+      if(!anyHit){
+        newStrokes.push({...s,order:newStrokes.length});
+      }else{
+        const surviving=erasePointSequence(pts,grid,cellSize,r,s.size);
+        for(const seg of surviving){
+          if(seg.length>=2)newStrokes.push({type:'line',x1:seg[0].x,y1:seg[0].y,x2:seg[seg.length-1].x,y2:seg[seg.length-1].y,color:s.color,size:s.size,order:newStrokes.length});
+        }
       }
     }else if(s.type==='ellipse'){
       const hit=isHitGrid(grid,cellSize,s.cx,s.cy,Math.max(s.rx,s.ry)+r);
@@ -1010,6 +1032,29 @@ function applyEraserToStrokes(fr,eraserPts,eraserSize){
   }
   fr.strokes=newStrokes;
 }
+// 消しゴムがベジェストロークに触れているかだけチェック（再構築はしない）
+function checkBezierHit(controls,grid,cellSize,r,strokeSize){
+  const hitR=r+strokeSize/2;
+  const hitR2=hitR*hitR;
+  for(let i=0;i<controls.length;i++){
+    const c=controls[i];
+    const steps=6;
+    for(let t=0;t<=steps;t++){
+      if(i>0&&t===0)continue;
+      const tt=t/steps,u=1-tt;
+      const px=u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex;
+      const py=u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey;
+      const gx=Math.floor(px/cellSize),gy=Math.floor(py/cellSize);
+      const pts=grid[gx+','+gy];
+      if(!pts)continue;
+      for(const ep of pts){
+        const dx=px-ep.x,dy=py-ep.y;
+        if(dx*dx+dy*dy<hitR2)return{anyHit:true};
+      }
+    }
+  }
+  return{anyHit:false};
+}
 function isHitGrid(grid,cellSize,x,y,radius){
   const gx=Math.floor(x/cellSize),gy=Math.floor(y/cellSize);
   const key=gx+','+gy;
@@ -1022,13 +1067,16 @@ function isHitGrid(grid,cellSize,x,y,radius){
 
 function eraseBezierSegments(controls,grid,cellSize,r,strokeSize){
   const allPts=[];
+  // セグメントインデックスも記録（どの制御点由来か）
+  const segIdx=[];
   for(let i=0;i<controls.length;i++){
     const c=controls[i];
-    const steps=6;
+    const steps=10;// サンプリング精度向上
     for(let t=0;t<=steps;t++){
       if(i>0&&t===0)continue;
       const tt=t/steps,u=1-tt;
       allPts.push({x:u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex,y:u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey});
+      segIdx.push(i);
     }
   }
   const hitR=r+strokeSize/2;
@@ -1053,10 +1101,13 @@ function eraseBezierSegments(controls,grid,cellSize,r,strokeSize){
       if(start!==-1){
         let pts=allPts.slice(start,i).map(p=>({x:p.x,y:p.y}));
         if(pts.length>=2){
-          // RDP簡略化でポイント爆発を防止（元の制御点数を超えない）
-          const maxPts=Math.max(controls.length,4);
+          // 生存セグメントに関連する元の制御点数を元に上限を決める
+          const startSeg=segIdx[start]||0;
+          const endSeg=segIdx[Math.min(i-1,segIdx.length-1)]||0;
+          const origCount=endSeg-startSeg+1;
+          const maxPts=Math.max(origCount*2,8);// より緩い制限
           if(pts.length>maxPts){
-            pts=rdp(pts,0.5);
+            pts=rdp(pts,0.3);// より小さいepsilonで精度維持
             if(pts.length>maxPts)pts=resamplePath(pts,maxPts);
           }
           segments.push(toBezier(pts));
@@ -1284,18 +1335,24 @@ function movePathPoint(strokes,info,nx,ny){
   if(info.type==='bezier'){
     const ctrls=s.controls;
     if(info.sub==='c'){
-      // 制御点（ベジェハンドル）を直接ドラッグ → recalcせず直接移動
+      // 制御点（ベジェハンドル）を直接ドラッグ → 直接移動＋手動調整フラグ
       ctrls[info.idx].cx=nx;ctrls[info.idx].cy=ny;
+      ctrls[info.idx]._manualCP=true; // 手動調整フラグ
     }else if(info.sub==='s'&&info.idx===0){
+      const dx=nx-ctrls[0].sx,dy=ny-ctrls[0].sy;
       ctrls[0].sx=nx;ctrls[0].sy=ny;
-      recalcControlPoints(ctrls);
+      // 隣接する制御点だけ局所更新（手動調整されていない場合のみ再計算）
+      recalcLocalControlPoints(ctrls,0,dx,dy);
     }else if(info.sub==='e'){
       const ci=info.idx;
+      const dx=nx-ctrls[ci].ex,dy=ny-ctrls[ci].ey;
       ctrls[ci].ex=nx;ctrls[ci].ey=ny;
       if(ci<ctrls.length-1){
         ctrls[ci+1].sx=nx;ctrls[ci+1].sy=ny;
       }
-      recalcControlPoints(ctrls);
+      // 影響範囲の制御点のみ局所更新
+      recalcLocalControlPoints(ctrls,ci,dx,dy);
+      if(ci<ctrls.length-1)recalcLocalControlPoints(ctrls,ci+1,dx,dy);
     }
   }else if(info.type==='line'){
     if(info.sub==='s'){s.x1=nx;s.y1=ny;}else{s.x2=nx;s.y2=ny;}
@@ -1310,7 +1367,38 @@ function movePathPoint(strokes,info,nx,ny){
     else if(info.sub==='bl'){const dx=nx-s.x;s.x=nx;s.w-=dx;s.h=ny-s.y;}
   }
 }
+// 局所的な制御点再計算（通過点移動時、手動調整済みは保持）
+function recalcLocalControlPoints(ctrls,segIdx,dx,dy){
+  if(!ctrls||segIdx<0||segIdx>=ctrls.length)return;
+  const c=ctrls[segIdx];
+  if(c._manualCP){
+    // 手動調整済み → 制御点を通過点の移動分だけ追従移動
+    // 移動したのが始点か終点かを推定し、制御点を比例的に移動
+    c.cx+=dx*0.5;c.cy+=dy*0.5;
+  }else{
+    // 自動計算 → Catmull-Romで再計算
+    recalcSingleControlPoint(ctrls,segIdx);
+  }
+}
+// 単一セグメントの制御点をCatmull-Romで再計算
+function recalcSingleControlPoint(ctrls,segIdx){
+  if(!ctrls||segIdx<0||segIdx>=ctrls.length)return;
+  const pts=[{x:ctrls[0].sx,y:ctrls[0].sy}];
+  for(let i=0;i<ctrls.length;i++)pts.push({x:ctrls[i].ex,y:ctrls[i].ey});
+  const i=segIdx;
+  const p0=pts[Math.max(0,i-1)];
+  const p1=pts[i];
+  const p2=pts[i+1];
+  const p3=pts[Math.min(pts.length-1,i+2)];
+  const cp1x=p1.x+(p2.x-p0.x)/6;
+  const cp1y=p1.y+(p2.y-p0.y)/6;
+  const cp2x=p2.x-(p3.x-p1.x)/6;
+  const cp2y=p2.y-(p3.y-p1.y)/6;
+  ctrls[i].cx=(cp1x+cp2x)/2;
+  ctrls[i].cy=(cp1y+cp2y)/2;
+}
 // Catmull-Romで全制御点を再計算（通過点の位置から滑らかな制御点を生成）
+// ※初期描画やポイント数調整時のみ使用
 function recalcControlPoints(ctrls){
   if(!ctrls||ctrls.length===0)return;
   // 通過点（アンカー）を収集
@@ -1330,6 +1418,7 @@ function recalcControlPoints(ctrls){
     // quadratic近似：2つのcubic制御点の中点
     ctrls[i].cx=(cp1x+cp2x)/2;
     ctrls[i].cy=(cp1y+cp2y)/2;
+    delete ctrls[i]._manualCP; // フラグリセット
   }
 }
 
