@@ -1678,7 +1678,10 @@ function onDownStroke(p,e){
         strokeEditInitAngle=Math.atan2(p.y-ay,p.x-ax);
       }else{
         strokeEditMode='scale';
-        strokeEditInitScale=Math.hypot(p.x-strokeEditCenter.x,p.y-strokeEditCenter.y);
+        // アンカーポイントを軸に拡大縮小（アンカーがない場合は中心を使用）
+        const ax=strokeEditAnchor?strokeEditAnchor.x:strokeEditCenter.x;
+        const ay=strokeEditAnchor?strokeEditAnchor.y:strokeEditCenter.y;
+        strokeEditInitScale=Math.hypot(p.x-ax,p.y-ay);
       }
       return;
     }
@@ -1710,16 +1713,15 @@ function onMoveStroke(p,e){
     if(strokeEditAnchor)strokeEditAnchor={x:strokeEditAnchor.x+dx,y:strokeEditAnchor.y+dy};
     strokeEditStart={x:p.x,y:p.y};
   }else if(strokeEditMode==='scale'){
-    const dist=Math.hypot(p.x-strokeEditCenter.x,p.y-strokeEditCenter.y);
+    // アンカーポイントを軸に拡大縮小（アンカーがない場合は中心を使用）
+    const ax=strokeEditAnchor?strokeEditAnchor.x:strokeEditCenter.x;
+    const ay=strokeEditAnchor?strokeEditAnchor.y:strokeEditCenter.y;
+    const dist=Math.hypot(p.x-ax,p.y-ay);
     const scale=dist/Math.max(1,strokeEditInitScale);
-    const cx=strokeEditCenter.x,cy=strokeEditCenter.y;
-    transformStroke(s,cx,cy,0,0,scale,scale,0);
-    strokeEditCorners=transformCorners(strokeEditCorners,cx,cy,0,0,scale,scale,0);
+    transformStroke(s,ax,ay,0,0,scale,scale,0);
+    strokeEditCorners=transformCorners(strokeEditCorners,ax,ay,0,0,scale,scale,0);
     strokeEditCenter=cornersCenter(strokeEditCorners);
-    if(strokeEditAnchor){
-      const ax=strokeEditAnchor.x,ay=strokeEditAnchor.y;
-      strokeEditAnchor={x:cx+(ax-cx)*scale,y:cy+(ay-cy)*scale};
-    }
+    // アンカー自体は固定（動かさない）
     strokeEditInitScale=dist;
   }else if(strokeEditMode==='rotate'){
     const ax=strokeEditAnchor?strokeEditAnchor.x:strokeEditCenter.x;
