@@ -354,7 +354,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 <div id="floatingPopup">
   <div id="popupHeader">Image Viewer</div>
   <div id="popupBody">
-    <iframe src="popup.html"></iframe>
+    <iframe
+  id="popupFrame"
+  src="popup.html">
+</iframe>
   </div>
   <!-- リサイズハンドル -->
   <div id="resizeHandle"></div>
@@ -2613,6 +2616,32 @@ document.addEventListener('mouseup', ()=>{
 });
 
 
+let imageData = null;
+
+imgInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    imageData = reader.result;
+    localStorage.setItem('currentProjectImage', imageData);
+    console.log('image saved');
+  };
+  reader.readAsDataURL(file);
+});
+
+openPopup.addEventListener('click', () => {
+  if (!imageData) {
+    console.warn('image not loaded yet');
+    return;
+  }
+
+  floatingPopup.style.display = 'block';
+
+  // iframe を再読み込みして画像反映
+  popupFrame.src = 'popup.html?' + Date.now();
+});
 
 </script>
 
