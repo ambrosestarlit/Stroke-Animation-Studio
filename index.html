@@ -239,6 +239,54 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   .tool-btn:hover{background:none;}
   .header-btn:hover{background:none;}
 }
+
+#floatingPopup{
+  position: fixed;
+  top: 80px;
+  right: 80px;
+  width: 320px;
+  height: 320px;
+  z-index: 2147483647;
+}
+
+
+#popupHeader{
+  height: 28px;
+  background: #333;
+  cursor: move;
+  color: #ccc;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
+#popupBody{
+  width: 100%;
+  height: calc(100% - 28px);
+}
+
+#popupBody iframe{
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+#resizeHandle{
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: se-resize;
+  background:
+    linear-gradient(135deg,
+      transparent 0%,
+      transparent 40%,
+      #666 40%,
+      #666 60%,
+      transparent 60%);
+}
 </style>
 </head>
 <body>
@@ -300,6 +348,18 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   </div>
 
   <div id="right-panel">
+    <input type="file" id="imgInput" accept="image/*">
+<button id="openPopup">表示</button>
+
+<div id="floatingPopup">
+  <div id="popupHeader">Image Viewer</div>
+  <div id="popupBody">
+    <iframe src="popup.html"></iframe>
+  </div>
+  <!-- リサイズハンドル -->
+  <div id="resizeHandle"></div>
+</div>
+
     <div class="panel-section">
       <div class="panel-header">カット管理</div>
       <div class="panel-body" id="cut-list" style="max-height:108px;overflow-y:auto;"></div>
@@ -2501,6 +2561,61 @@ async function exportAllPNG(){
 // ===========================================================
 function notify(msg){const el=document.getElementById('notification');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.display='none';},2500);}
 window.addEventListener('load',init);
+
+const popup = document.getElementById('floatingPopup');
+const popupHeader = document.getElementById('popupHeader');
+const handle = document.getElementById('resizeHandle');
+
+let drag = false;
+let resizing = false;
+
+let ox=0, oy=0;
+let startX=0, startY=0, startW=0, startH=0;
+
+popupHeader.addEventListener('mousedown', e=>{
+  drag = true;
+
+  popup.style.left = popup.offsetLeft + 'px';
+  popup.style.right = 'auto';
+
+  ox = e.clientX - popup.offsetLeft;
+  oy = e.clientY - popup.offsetTop;
+});
+
+handle.addEventListener('mousedown', e=>{
+  e.stopPropagation();   // ← 超重要
+  resizing = true;
+
+  startX = e.clientX;
+  startY = e.clientY;
+  startW = popup.offsetWidth;
+  startH = popup.offsetHeight;
+});
+
+document.addEventListener('mousemove', e=>{
+  if(drag){
+    popup.style.left = (e.clientX - ox) + 'px';
+    popup.style.top  = (e.clientY - oy) + 'px';
+  }
+
+  if(resizing){
+    const w = startW + (e.clientX - startX);
+    const h = startH + (e.clientY - startY);
+
+    popup.style.width  = Math.max(160, w) + 'px';
+    popup.style.height = Math.max(120, h) + 'px';
+  }
+});
+
+document.addEventListener('mouseup', ()=>{
+  drag = false;
+  resizing = false;
+});
+
+
+
 </script>
+
+
 </body>
 </html>
