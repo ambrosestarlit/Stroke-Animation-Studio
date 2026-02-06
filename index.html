@@ -524,6 +524,9 @@ let draftOpacity=0.4; // 下書きレイヤー不透明度
 let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
 let viewTool=''; // '' | 'pan' | 'rotate' （空=通常描画モード）
 
+// ★ ポップアップ画像管理用プロジェクトオブジェクト
+let project={popupImages:[]};
+
 // クリップボード（フレームコピー用）
 let clipFrame=null;       // 単一レイヤー {strokes, draftImg}
 let clipAllFrames=null;   // 全レイヤー [{strokes, draftImg}, ...]
@@ -2437,7 +2440,8 @@ function getProjectName(){return document.getElementById('project-name-input').v
 function saveProject(){
   const pn=getProjectName();
   const p={version:2,appName:'StrokeAnimationStudio',projectName:pn,cw:S.cw,ch:S.ch,fps:S.fps,cuts,currentCut,frame:S.frame,layer:S.layer,layerVis,onionLayerVis,
-    frameGuide:{w:frameGuideW,h:frameGuideH,enabled:document.getElementById('frame-guide-enabled').checked}};
+    frameGuide:{w:frameGuideW,h:frameGuideH,enabled:document.getElementById('frame-guide-enabled').checked},
+    popupImages:project.popupImages||[]};
   const b=new Blob([JSON.stringify(p)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=pn+'.sasp';a.click();URL.revokeObjectURL(a.href);notify('保存: '+pn+'.sasp');
 }
@@ -2457,6 +2461,13 @@ function handleLoadProject(e){
       document.getElementById('frame-guide-w').value=frameGuideW;
       document.getElementById('frame-guide-h').value=frameGuideH;
       document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
+    }
+    // ★ popupImagesの読み込み
+    if(p.popupImages){
+      project.popupImages=p.popupImages;
+      // localStorageにも同期
+      const key=`project:${currentProjectId}:images`;
+      localStorage.setItem(key,JSON.stringify(p.popupImages));
     }
     draftImgCache={};createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
     renderAll();undoStack=[];redoStack=[];notify('読み込みました');
@@ -2618,30 +2629,57 @@ document.addEventListener('mouseup', ()=>{
 
 let imageData = null;
 
+// プロジェクトID
+const currentProjectId = 'project_001';
+
 imgInput.addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = () => {
-    imageData = reader.result;
-    localStorage.setItem('currentProjectImage', imageData);
-    console.log('image saved');
+    const base64 = reader.result;
+    const key = `project:${currentProjectId}:images`;
+    const images = JSON.parse(localStorage.getItem(key)) || [];
+    
+    // localStorageに追加
+    images.push(reader.result);
+    localStorage.setItem(key, JSON.stringify(images));
+
+    // ★ popup が表示中なら必ず更新
+    if (floatingPopup.offsetParent !== null) {
+      popupFrame.src =
+        `popup.html?project=${currentProjectId}&t=${Date.now()}`;
+    }
+
+    // ★★★ ここで.saspファイル(project)に画像を埋め込む ★★★
+    // プロジェクトデータに画像配列を保持
+    if (!project.popupImages) {
+      project.popupImages = [];
+    }
+    project.popupImages.push(base64);
+
+    // プロジェクトを保存
+    saveProject();
+    
+    notify('画像を.saspに埋め込みました');
+    console.log('画像を.saspに埋め込み:', base64.slice(0, 40));
   };
   reader.readAsDataURL(file);
 });
 
-openPopup.addEventListener('click', () => {
-  if (!imageData) {
-    console.warn('image not loaded yet');
-    return;
-  }
 
+openPopup.addEventListener('click', () => {
   floatingPopup.style.display = 'block';
 
-  // iframe を再読み込みして画像反映
-  popupFrame.src = 'popup.html?' + Date.now();
+  // ★ imageData は見ない。常に再読み込み
+  popupFrame.src =
+    `popup.html?project=${currentProjectId}&t=${Date.now()}`;
 });
+
+
+
+
 
 </script>
 

@@ -20,12 +20,24 @@ img{
 </head>
 <body>
 
-<img id="img">
+<img id="img" style="max-width:100%;max-height:100%;">
 
 <script>
-const img = document.getElementById('img');
-const data = localStorage.getItem('currentProjectImage');
-if(data) img.src = data;
+window.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(location.search);
+  const projectId = params.get('project');
+
+  const key = `project:${projectId}:images`;
+  const images = JSON.parse(localStorage.getItem(key)) || [];
+
+  const img = document.getElementById('img');
+
+  if (images.length > 0) {
+    // ★ 最後に追加した画像を表示
+    img.src = images[images.length - 1];
+  }
+});
+
 </script>
 
 </body>
