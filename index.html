@@ -2648,8 +2648,9 @@ imgInput.addEventListener('change', e => {
 
     // ★ popup が表示中なら必ず更新
     if (floatingPopup.offsetParent !== null) {
-      popupFrame.src =
-        `popup.html?project=${currentProjectId}&t=${Date.now()}`;
+      popupFrame.contentWindow.postMessage({
+        type: 'imageAdded'
+      }, '*');
     }
 
     // ★★★ ここで.saspファイル(project)に画像を埋め込む ★★★
@@ -2658,12 +2659,9 @@ imgInput.addEventListener('change', e => {
       project.popupImages = [];
     }
     project.popupImages.push(base64);
-
-    // プロジェクトを保存
-    saveProject();
     
-    notify('画像を.saspに埋め込みました');
-    console.log('画像を.saspに埋め込み:', base64.slice(0, 40));
+    notify('画像を読み込みました');
+    console.log('画像をプロジェクトに追加:', base64.slice(0, 40));
   };
   reader.readAsDataURL(file);
 });
@@ -2675,6 +2673,20 @@ openPopup.addEventListener('click', () => {
   // ★ imageData は見ない。常に再読み込み
   popupFrame.src =
     `popup.html?project=${currentProjectId}&t=${Date.now()}`;
+});
+
+// ========================================================================
+// ★ popup.htmlからの画像更新メッセージを受信
+// ========================================================================
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'updatePopupImages') {
+    const { images, projectId } = event.data;
+    
+    // projectオブジェクトを更新
+    project.popupImages = images;
+    
+    notify('画像ライブラリを更新しました');
+  }
 });
 
 

@@ -9,32 +9,377 @@ html,body{
   height:100%;
   background:#111;
   display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+#imageContainer{
+  flex:1;
+  display:flex;
   align-items:center;
   justify-content:center;
+  width:100%;
+  overflow:hidden;
+  position:relative;
 }
 img{
   max-width:100%;
   max-height:100%;
 }
+#controls{
+  padding:8px;
+  background:#1a1a2e;
+  width:100%;
+  box-sizing:border-box;
+  display:flex;
+  gap:8px;
+  justify-content:center;
+  align-items:center;
+}
+button{
+  padding:6px 12px;
+  background:#4a9eff;
+  color:#fff;
+  border:none;
+  border-radius:4px;
+  cursor:pointer;
+  font-size:14px;
+  min-width:40px;
+}
+button:hover{
+  background:#3a8eef;
+}
+button:active{
+  background:#2a7edf;
+}
+button:disabled{
+  background:#333;
+  color:#666;
+  cursor:not-allowed;
+}
+#status{
+  padding:4px 8px;
+  background:#2a2a3e;
+  color:#aaa;
+  font-size:12px;
+  border-radius:3px;
+}
+#libraryBtn{
+  font-size:16px;
+  padding:6px 10px;
+}
+
+/* 画像ライブラリモーダル */
+#libraryModal{
+  display:none;
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.8);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+}
+#libraryModal.show{
+  display:flex;
+}
+#libraryContent{
+  background:#1a1a2e;
+  border-radius:8px;
+  width:80%;
+  max-width:600px;
+  max-height:80%;
+  display:flex;
+  flex-direction:column;
+}
+#libraryHeader{
+  padding:12px 16px;
+  background:#2a2a3e;
+  border-radius:8px 8px 0 0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  color:#fff;
+  font-weight:bold;
+}
+#libraryClose{
+  background:#ff4a4a;
+  padding:4px 12px;
+  font-size:12px;
+}
+#libraryBody{
+  padding:16px;
+  overflow-y:auto;
+  flex:1;
+}
+#libraryGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));
+  gap:8px;
+}
+.library-item{
+  position:relative;
+  aspect-ratio:1;
+  border:2px solid transparent;
+  border-radius:4px;
+  overflow:hidden;
+  cursor:pointer;
+  background:#2a2a3e;
+}
+.library-item:hover{
+  border-color:#4a9eff;
+}
+.library-item.selected{
+  border-color:#4a9eff;
+  box-shadow:0 0 10px rgba(74,158,255,0.5);
+}
+.library-item img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.library-item-index{
+  position:absolute;
+  top:2px;
+  left:2px;
+  background:rgba(0,0,0,0.7);
+  color:#fff;
+  padding:1px 4px;
+  border-radius:2px;
+  font-size:9px;
+}
+#libraryActions{
+  padding:12px 16px;
+  background:#2a2a3e;
+  border-radius:0 0 8px 8px;
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+}
+#deleteBtn{
+  background:#ff4a4a;
+}
+#deleteBtn:hover{
+  background:#ef3a3a;
+}
+#deleteBtn:disabled{
+  background:#333;
+  color:#666;
+}
 </style>
 </head>
 <body>
 
-<img id="img" style="max-width:100%;max-height:100%;">
+<div id="imageContainer">
+  <img id="img">
+</div>
+
+<div id="controls">
+  <button id="prevBtn" disabled>◁</button>
+  <div id="status">画像なし</div>
+  <button id="nextBtn" disabled>▷</button>
+  <button id="libraryBtn">📖</button>
+</div>
+
+<!-- 画像ライブラリモーダル -->
+<div id="libraryModal">
+  <div id="libraryContent">
+    <div id="libraryHeader">
+      <span>画像ライブラリ</span>
+      <button id="libraryClose">閉じる</button>
+    </div>
+    <div id="libraryBody">
+      <div id="libraryGrid"></div>
+    </div>
+    <div id="libraryActions">
+      <button id="deleteBtn" disabled>🗑️ 削除</button>
+    </div>
+  </div>
+</div>
 
 <script>
+let currentIndex = 0;
+let images = [];
+let projectId = '';
+let selectedLibraryIndex = -1;
+
+const img = document.getElementById('img');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const status = document.getElementById('status');
+const libraryBtn = document.getElementById('libraryBtn');
+const libraryModal = document.getElementById('libraryModal');
+const libraryClose = document.getElementById('libraryClose');
+const libraryGrid = document.getElementById('libraryGrid');
+const deleteBtn = document.getElementById('deleteBtn');
+
 window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(location.search);
-  const projectId = params.get('project');
+  projectId = params.get('project');
+  
+  loadImages();
+  updateDisplay();
+});
 
+function loadImages() {
   const key = `project:${projectId}:images`;
-  const images = JSON.parse(localStorage.getItem(key)) || [];
+  images = JSON.parse(localStorage.getItem(key)) || [];
+}
 
-  const img = document.getElementById('img');
+function saveImages() {
+  const key = `project:${projectId}:images`;
+  localStorage.setItem(key, JSON.stringify(images));
+  
+  // 親ウィンドウに画像更新を通知
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({
+      type: 'updatePopupImages',
+      images: images,
+      projectId: projectId
+    }, '*');
+  }
+}
 
-  if (images.length > 0) {
-    // ★ 最後に追加した画像を表示
-    img.src = images[images.length - 1];
+function updateDisplay() {
+  if (images.length === 0) {
+    img.src = '';
+    status.textContent = '画像なし';
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    return;
+  }
+  
+  // インデックスの範囲チェック
+  if (currentIndex >= images.length) {
+    currentIndex = images.length - 1;
+  }
+  if (currentIndex < 0) {
+    currentIndex = 0;
+  }
+  
+  img.src = images[currentIndex];
+  status.textContent = `${currentIndex + 1} / ${images.length}`;
+  
+  prevBtn.disabled = currentIndex === 0;
+  nextBtn.disabled = currentIndex === images.length - 1;
+}
+
+prevBtn.addEventListener('click', () => {
+  if (currentIndex > 0) {
+    currentIndex--;
+    updateDisplay();
+  }
+});
+
+nextBtn.addEventListener('click', () => {
+  if (currentIndex < images.length - 1) {
+    currentIndex++;
+    updateDisplay();
+  }
+});
+
+libraryBtn.addEventListener('click', () => {
+  openLibrary();
+});
+
+libraryClose.addEventListener('click', () => {
+  closeLibrary();
+});
+
+libraryModal.addEventListener('click', (e) => {
+  if (e.target === libraryModal) {
+    closeLibrary();
+  }
+});
+
+function openLibrary() {
+  selectedLibraryIndex = -1;
+  renderLibrary();
+  libraryModal.classList.add('show');
+}
+
+function closeLibrary() {
+  libraryModal.classList.remove('show');
+}
+
+function renderLibrary() {
+  libraryGrid.innerHTML = '';
+  
+  if (images.length === 0) {
+    libraryGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#666;padding:20px;">画像がありません</div>';
+    deleteBtn.disabled = true;
+    return;
+  }
+  
+  images.forEach((imgData, index) => {
+    const item = document.createElement('div');
+    item.className = 'library-item';
+    if (index === selectedLibraryIndex) {
+      item.classList.add('selected');
+    }
+    
+    const imgEl = document.createElement('img');
+    imgEl.src = imgData;
+    
+    const indexLabel = document.createElement('div');
+    indexLabel.className = 'library-item-index';
+    indexLabel.textContent = index + 1;
+    
+    item.appendChild(imgEl);
+    item.appendChild(indexLabel);
+    
+    item.addEventListener('click', () => {
+      selectLibraryItem(index);
+    });
+    
+    libraryGrid.appendChild(item);
+  });
+  
+  deleteBtn.disabled = selectedLibraryIndex === -1;
+}
+
+function selectLibraryItem(index) {
+  if (selectedLibraryIndex === index) {
+    // 同じものをクリックしたら選択解除
+    selectedLibraryIndex = -1;
+  } else {
+    selectedLibraryIndex = index;
+  }
+  renderLibrary();
+}
+
+deleteBtn.addEventListener('click', () => {
+  if (selectedLibraryIndex === -1) return;
+  
+  if (confirm(`画像 ${selectedLibraryIndex + 1} を削除しますか？`)) {
+    images.splice(selectedLibraryIndex, 1);
+    saveImages();
+    
+    // 現在表示中の画像が削除された場合
+    if (currentIndex === selectedLibraryIndex) {
+      if (currentIndex >= images.length) {
+        currentIndex = Math.max(0, images.length - 1);
+      }
+      updateDisplay(); // ★ メイン画面の表示を更新
+    } else if (currentIndex > selectedLibraryIndex) {
+      currentIndex--;
+      updateDisplay(); // ★ メイン画面の表示を更新
+    } else {
+      updateDisplay(); // ★ 数値を更新するために追加
+    }
+    
+    selectedLibraryIndex = -1;
+    renderLibrary();
+  }
+});
+
+// 親ウィンドウからの画像更新を受信
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'imageAdded') {
+    loadImages();
+    currentIndex = images.length - 1; // 最新画像を表示
+    updateDisplay();
   }
 });
 
