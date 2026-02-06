@@ -180,6 +180,7 @@ button:disabled{
   <div id="status">画像なし</div>
   <button id="nextBtn" disabled>▷</button>
   <button id="libraryBtn">📖</button>
+  <button id="eyedropperBtn" title="スポイト（メインキャンバスから色を取得）">💧</button>
 </div>
 
 <!-- 画像ライブラリモーダル -->
@@ -383,6 +384,21 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// 既存のスクリプトの末尾あたりに追加
+const eyedropperBtn = document.getElementById('eyedropperBtn');
+
+eyedropperBtn.addEventListener('click', () => {
+  // 親ウィンドウ（index.html）に「スポイト開始」のメッセージを送る
+  window.parent.postMessage({
+    type: 'requestEyedropper'
+  }, '*');
+
+  // ボタンを一時的に押した感じにする（任意）
+  eyedropperBtn.style.background = '#ff6b81';
+  setTimeout(() => {
+    eyedropperBtn.style.background = '';
+  }, 200);
+});
 </script>
 
 </body>

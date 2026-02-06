@@ -652,7 +652,95 @@ function getEffectiveFrame(li,fi){
   if(eidx<0||eidx>=frames.length)return null;
   return frames[eidx];
 }
+// =============================================
+// スポイトモード（EyeDropper API版：画面全体対応 + 既存機能互換）
+// =============================================
+function startEyedropperMode() {
+  // 現在のツールとカーソルを記憶
+  const previousTool = S.tool;
+  const previousCursor = document.getElementById('canvas-area').style.cursor;
 
+  // スポイトモードに切り替え
+  S.tool = 'eyedropper';
+  document.getElementById('canvas-area').style.cursor = 'crosshair';
+
+  notify('スポイトモード：画面上の好きな場所をクリックしてください（Escでキャンセル）');
+
+  // cleanup関数（1回だけ定義）
+  const cleanup = () => {
+    document.removeEventListener('keydown', onKeyEsc);
+    S.tool = previousTool;
+    document.getElementById('canvas-area').style.cursor = previousCursor;
+    selectTool(previousTool);
+  };
+
+  // Escキーでのキャンセル
+  const onKeyEsc = (e) => {
+    if (e.key === 'Escape') {
+      notify('スポイトをキャンセルしました');
+      cleanup();
+    }
+  };
+
+  document.addEventListener('keydown', onKeyEsc);
+
+  // ── EyeDropper が使える場合 ──
+  if (window.EyeDropper) {
+    const eyeDropper = new EyeDropper();
+
+    eyeDropper.open()
+      .then(result => {
+        const hex = result.sRGBHex;
+
+        S.penColor = hex;
+        document.getElementById('pen-color').value = hex;
+        updateActiveColorButton();
+
+        notify(`色を ${hex} に設定しました`);
+
+        cleanup();
+      })
+      .catch(err => {
+        // ★ ここを変更：失敗通知を一切出さない（キャンセル時は静かに終了）
+        // 実際の失敗（権限エラーなど）は稀なのでログだけ残す
+        if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+          console.warn('EyeDropper エラー（無視）:', err);
+        }
+        // キャンセル時は通知なしで終了
+        cleanup();
+      });
+  }
+  // ── EyeDropper が使えない場合 → 従来のキャンバス内スポイト ──
+  else {
+    notify('画面全体スポイト非対応のため、キャンバス内のみから色を取ります');
+
+    const onClick = (e) => {
+      const pos = getPos(e);
+      const ctx = layerCtxs[S.layer];
+
+      const pixel = ctx.getImageData(
+        Math.floor(pos.x),
+        Math.floor(pos.y),
+        1, 1
+      ).data;
+
+      const r = pixel[0].toString(16).padStart(2, '0');
+      const g = pixel[1].toString(16).padStart(2, '0');
+      const b = pixel[2].toString(16).padStart(2, '0');
+      const hex = '#' + r + g + b;
+
+      S.penColor = hex;
+      document.getElementById('pen-color').value = hex;
+      updateActiveColorButton();
+
+      notify(`色を ${hex} に設定しました`);
+
+      cleanup();
+    };
+
+    document.getElementById('canvas-area').addEventListener('click', onClick, { once: true });
+  }
+}
 // ===========================================================
 // 初期化
 // ===========================================================
@@ -2743,17 +2831,35 @@ openPopup.addEventListener('click', () => {
 });
 
 // ========================================================================
-// ★ popup.htmlからの画像更新メッセージを受信
+// ★ popup.html からの各種メッセージを受信
 // ========================================================================
 window.addEventListener('message', (event) => {
-  if (event.data.type === 'updatePopupImages') {
-    const { images, projectId } = event.data;
+  // 安全のため、信頼できるオリジンからのメッセージだけ処理（同じドメインなら省略可）
+  // if (event.origin !== window.location.origin) return;
+
+  const data = event.data;
+
+  // ── 1. 画像ライブラリ更新の通知（今までの処理） ──
+  if (data.type === 'updatePopupImages') {
+    const { images, projectId } = data;
     
     // projectオブジェクトを更新
     project.popupImages = images;
     
+    // localStorage にも同期（必要なら）
+    const key = `project:${projectId}:images`;
+    localStorage.setItem(key, JSON.stringify(images));
+    
     notify('画像ライブラリを更新しました');
   }
+
+  // ── 2. 新規：スポイト開始のリクエスト ──
+  else if (data.type === 'requestEyedropper') {
+    startEyedropperMode();
+  }
+
+  // 必要なら他にも拡張可能
+  // else if (data.type === '何か別のメッセージ') { ... }
 });
 
 // ページ読み込み後 or init() の最後あたりに追加
