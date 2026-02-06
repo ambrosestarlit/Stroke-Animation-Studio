@@ -127,7 +127,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 
 #right-panel{width:220px;background:var(--bg-panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
 .panel-section{border-bottom:1px solid var(--border);}
-.panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-secondary);font-size:11px;font-weight:600;color:var(--text-secondary);}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-secondary);font-size:12px;font-weight:600;color:var(--text-secondary);}
 .panel-body{padding:8px;}
 .layer-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:2px;}
 .layer-item:hover{background:var(--bg-input);}
@@ -287,6 +287,43 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       #666 60%,
       transparent 60%);
 }
+
+/* カラーパレットボタン（シンプル・安定版） */
+#color-palette {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;           /* 角丸四角 */
+  border: 2px solid #444;       /* 暗めの枠線 */
+  cursor: pointer;
+  transition: none;             /* アニメーション完全オフ → チカチカ防止 */
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.6); /* 少し立体感 */
+}
+
+.color-swatch:hover {
+  box-shadow: 0 0 0 3px rgba(233,69,96,0.5); /* ホバー時は軽く光るだけ */
+  transform: scale(1.08);
+}
+
+.color-swatch.active {
+  border-color: #e94560;
+  box-shadow: 0 0 0 4px rgba(233,69,96,0.4);
+}
+
+/* 各ボタンの背景色（HTMLのdata-colorで自動設定） */
+.color-swatch[data-color="#000000"] { background: #000000; }
+.color-swatch[data-color="#ffffff"] { background: #ffffff; }
+.color-swatch[data-color="#e94560"] { background: #e94560; }
+.color-swatch[data-color="#0000ff"] { background: #0000ff; }
+.color-swatch[data-color="#ffff00"] { background: #ffff00; }
+.color-swatch[data-color="#87FF42"] { background: #87FF42; }
+
 </style>
 </head>
 <body>
@@ -362,7 +399,37 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   <!-- リサイズハンドル -->
   <div id="resizeHandle"></div>
 </div>
-
+<div class="panel-section" style="border-bottom:none; padding-bottom:0;">
+  <div class="panel-header" style="font-size:12px; padding:4px 10px;">
+    基本カラー
+  </div>
+  <div class="panel-body" style="padding:6px 10px 2px;">
+    <div id="color-palette" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:left;">
+      <!-- 黒 -->
+      <button class="color-swatch" data-color="#000000" title="黒"></button>
+      <!-- 白 -->
+      <button class="color-swatch" data-color="#ffffff" title="白"></button>
+      <!-- 既存の4色 -->
+      <button class="color-swatch" data-color="#e94560" title="赤"></button>
+      <button class="color-swatch" data-color="#0000ff" title="青"></button>
+      <button class="color-swatch" data-color="#ffff00" title="黄"></button>
+      
+    </div>
+  </div>
+</div>
+<div class="panel-section" style="border-bottom:none; padding-bottom:0;">
+  <div class="panel-header" style="font-size:10px; padding:4px 10px;">
+    背景透過色
+  </div>
+  <div class="panel-body" style="padding:6px 10px 2px;">
+    <div id="color-palette" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:left;">
+      
+      <!-- 既存の4色 -->
+      
+      <button class="color-swatch" data-color="#87FF42" title="背景透過"></button>
+    </div>
+  </div>
+</div>
     <div class="panel-section">
       <div class="panel-header">カット管理</div>
       <div class="panel-body" id="cut-list" style="max-height:108px;overflow-y:auto;"></div>
@@ -2689,7 +2756,55 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// ページ読み込み後 or init() の最後あたりに追加
+function initColorPalette() {
+  const palette = document.getElementById('color-palette');
+  if (!palette) return;
 
+  const buttons = palette.querySelectorAll('.color-swatch');
+
+  // 初期状態：現在のペン色に一致するものをアクティブに
+  updateActiveColorButton();
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newColor = btn.dataset.color;
+      S.penColor = newColor;
+      document.getElementById('pen-color').value = newColor;
+
+      // アクティブ状態の切り替え
+      buttons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      notify(`色を ${newColor} に変更しました`);
+    });
+  });
+}
+
+// 色が変わったとき・ツールが変わったときなどに呼び出す
+function updateActiveColorButton() {
+  const buttons = document.querySelectorAll('#color-palette .color-swatch');
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.color.toLowerCase() === S.penColor.toLowerCase());
+  });
+}
+
+// 既存の色変更箇所（pen-color の input イベントなど）にも追加
+document.getElementById('pen-color').addEventListener('input', e => {
+  S.penColor = e.target.value;
+  updateActiveColorButton();   // ← 追加
+});
+
+// ツール変更時にも色パレットのアクティブ状態を更新したい場合は
+// selectTool() 関数の最後に追加
+function selectTool(t) {
+  // … 既存の処理 …
+  
+  updateActiveColorButton();   // ← 追加
+}
+
+// init() の最後に呼び出し
+initColorPalette();
 
 
 
