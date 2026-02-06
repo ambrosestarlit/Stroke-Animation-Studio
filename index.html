@@ -2190,104 +2190,134 @@ function renderStrokeGuide(){
     for(let idx=0;idx<strokes.length;idx++)drawStrokeGuideAnnotation(guideCtx,strokes[idx],idx+1);
   }
 }
-function drawStrokeGuideAnnotation(ctx,s,num){
+function drawStrokeGuideAnnotation(ctx, s, num) {
   // ストロークのパスをサンプリングしてポイント列を取得
-  let pathPts=[];
-  if(s.type==='bezier'&&s.controls&&s.controls.length>0){
-    for(let i=0;i<s.controls.length;i++){
-      const c=s.controls[i];
-      const steps=10;
-      for(let t=0;t<=steps;t++){
-        if(i>0&&t===0)continue;
-        const tt=t/steps,u=1-tt;
-        pathPts.push({x:u*u*c.sx+2*u*tt*c.cx+tt*tt*c.ex,y:u*u*c.sy+2*u*tt*c.cy+tt*tt*c.ey});
+  let pathPts = [];
+  if (s.type === 'bezier' && s.controls && s.controls.length > 0) {
+    for (let i = 0; i < s.controls.length; i++) {
+      const c = s.controls[i];
+      const steps = 10;
+      for (let t = 0; t <= steps; t++) {
+        if (i > 0 && t === 0) continue;
+        const tt = t / steps, u = 1 - tt;
+        pathPts.push({
+          x: u*u*c.sx + 2*u*tt*c.cx + tt*tt*c.ex,
+          y: u*u*c.sy + 2*u*tt*c.cy + tt*tt*c.ey
+        });
       }
     }
-  }else if(s.type==='line'){
-    const n=20;
-    for(let i=0;i<=n;i++)pathPts.push({x:s.x1+(s.x2-s.x1)*i/n,y:s.y1+(s.y2-s.y1)*i/n});
-  }else if(s.type==='ellipse'){
-    const n=40;
-    for(let i=0;i<=n;i++){const a=Math.PI*2*i/n;pathPts.push({x:s.cx+s.rx*Math.cos(a),y:s.cy+s.ry*Math.sin(a)});}
-  }else if(s.type==='rect'){
-    pathPts.push({x:s.x,y:s.y},{x:s.x+s.w,y:s.y},{x:s.x+s.w,y:s.y+s.h},{x:s.x,y:s.y+s.h},{x:s.x,y:s.y});
-  }else return;
-  if(pathPts.length<2)return;
+  } else if (s.type === 'line') {
+    const n = 20;
+    for (let i = 0; i <= n; i++) {
+      pathPts.push({
+        x: s.x1 + (s.x2 - s.x1) * i / n,
+        y: s.y1 + (s.y2 - s.y1) * i / n
+      });
+    }
+  } else if (s.type === 'ellipse') {
+    const n = 40;
+    for (let i = 0; i <= n; i++) {
+      const a = Math.PI * 2 * i / n;
+      pathPts.push({ x: s.cx + s.rx * Math.cos(a), y: s.cy + s.ry * Math.sin(a) });
+    }
+  } else if (s.type === 'rect') {
+    pathPts.push(
+      {x:s.x, y:s.y},
+      {x:s.x+s.w, y:s.y},
+      {x:s.x+s.w, y:s.y+s.h},
+      {x:s.x, y:s.y+s.h},
+      {x:s.x, y:s.y}
+    );
+  } else return;
+
+  if (pathPts.length < 2) return;
 
   // 累積距離を計算
-  const dists=[0];
-  for(let i=1;i<pathPts.length;i++){
-    const dx=pathPts[i].x-pathPts[i-1].x,dy=pathPts[i].y-pathPts[i-1].y;
-    dists.push(dists[i-1]+Math.hypot(dx,dy));
+  const dists = [0];
+  for (let i = 1; i < pathPts.length; i++) {
+    const dx = pathPts[i].x - pathPts[i-1].x;
+    const dy = pathPts[i].y - pathPts[i-1].y;
+    dists.push(dists[i-1] + Math.hypot(dx, dy));
   }
-  const totalLen=dists[dists.length-1];
-  if(totalLen<5)return;
+  const totalLen = dists[dists.length - 1];
+  if (totalLen < 5) return;
 
-  // 始点の上に番号（丸＋数字）
-  const sp=pathPts[0];
-  // 始点での方向を取得して、パスの反対側にオフセット
-  const nd=Math.min(3,pathPts.length-1);
-  const startDx=pathPts[nd].x-sp.x,startDy=pathPts[nd].y-sp.y;
-  const startDist=Math.hypot(startDx,startDy)||1;
-  const offX=-startDx/startDist*20,offY=-startDy/startDist*20;
+  // ── 始点の番号丸（サイズ少し小さくしても見やすい範囲で） ──
+  const sp = pathPts[0];
+  const nd = Math.min(3, pathPts.length - 1);
+  const startDx = pathPts[nd].x - sp.x;
+  const startDy = pathPts[nd].y - sp.y;
+  const startDist = Math.hypot(startDx, startDy) || 1;
+  const offX = -startDx / startDist * 18;
+  const offY = -startDy / startDist * 18;
+
   ctx.save();
-  ctx.strokeStyle='rgba(233,69,96,0.9)';ctx.lineWidth=2;
-  ctx.beginPath();ctx.arc(sp.x+offX,sp.y+offY,10,0,Math.PI*2);ctx.stroke();
-  ctx.fillStyle='rgba(233,69,96,0.9)';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(String(num),sp.x+offX,sp.y+offY);
+  ctx.strokeStyle = 'rgba(233,69,96,0.9)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(sp.x + offX, sp.y + offY, 9, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(233,69,96,0.9)';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(num), sp.x + offX, sp.y + offY);
   ctx.restore();
 
-  // パスに沿ってチェブロン（>矢じり）を一定間隔で描画
-  const chevronInterval=Math.max(40,totalLen/6);
-  const chevronSize=Math.min(14,Math.max(8,totalLen*0.04));
-  ctx.save();
-  ctx.strokeStyle='rgba(233,69,96,0.85)';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
+  // ── チェブロン（＞）を最大3つまで表示 ───────────────────────
+  const MAX_CHEVRONS = 3;
+  const chevronInterval = totalLen / (MAX_CHEVRONS + 1.5);  // 少し余裕を持たせる
+  const chevronSize = 9;  // ← ここ！小さくした（元14→9）
 
-  // 最初のチェブロンをパスの1/4あたりから、最後は終点付近
-  let d=chevronInterval*0.5;
-  while(d<totalLen){
-    // dの位置の座標と方向を取得
-    let pi=0;
-    for(let i=1;i<dists.length;i++){if(dists[i]>=d){pi=i;break;}}
-    if(pi===0)pi=dists.length-1;
-    const seg=dists[pi]-dists[pi-1]||1;
-    const t=(d-dists[pi-1])/seg;
-    const px=pathPts[pi-1].x+(pathPts[pi].x-pathPts[pi-1].x)*t;
-    const py=pathPts[pi-1].y+(pathPts[pi].y-pathPts[pi-1].y)*t;
-    // 方向（前後数ポイントで平均化）
-    const lookAhead=Math.min(pi+2,pathPts.length-1);
-    const lookBehind=Math.max(pi-2,0);
-    const dirX=pathPts[lookAhead].x-pathPts[lookBehind].x;
-    const dirY=pathPts[lookAhead].y-pathPts[lookBehind].y;
-    const dirLen=Math.hypot(dirX,dirY)||1;
-    const nx=dirX/dirLen,ny=dirY/dirLen;
-    // チェブロン「>」を描画（進行方向に向く）
-    // 垂直方向
-    const perpX=-ny,perpY=nx;
-    const tipX=px+nx*chevronSize*0.5,tipY=py+ny*chevronSize*0.5;
-    const backX=px-nx*chevronSize*0.5,backY=py-ny*chevronSize*0.5;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(233,69,96,0.75)';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  let count = 0;
+  let d = chevronInterval * 0.8;  // 最初を少し遅らせて始点と被らないように
+
+  while (d < totalLen && count < MAX_CHEVRONS) {
+    // dの位置を探す
+    let pi = 0;
+    for (let i = 1; i < dists.length; i++) {
+      if (dists[i] >= d) { pi = i; break; }
+    }
+    if (pi === 0) pi = dists.length - 1;
+
+    const seg = dists[pi] - dists[pi - 1] || 1;
+    const t = (d - dists[pi - 1]) / seg;
+    const px = pathPts[pi - 1].x + (pathPts[pi].x - pathPts[pi - 1].x) * t;
+    const py = pathPts[pi - 1].y + (pathPts[pi].y - pathPts[pi - 1].y) * t;
+
+    // 進行方向（少し先を見た平均方向）
+    const lookAhead = Math.min(pi + 3, pathPts.length - 1);
+    const lookBehind = Math.max(pi - 2, 0);
+    const dirX = pathPts[lookAhead].x - pathPts[lookBehind].x;
+    const dirY = pathPts[lookAhead].y - pathPts[lookBehind].y;
+    const dirLen = Math.hypot(dirX, dirY) || 1;
+    const nx = dirX / dirLen;
+    const ny = dirY / dirLen;
+
+    const perpX = -ny;
+    const perpY = nx;
+
+    const tipX = px + nx * chevronSize * 0.5;
+    const tipY = py + ny * chevronSize * 0.5;
+    const backX = px - nx * chevronSize * 0.5;
+    const backY = py - ny * chevronSize * 0.5;
+
     ctx.beginPath();
-    ctx.moveTo(backX+perpX*chevronSize,backY+perpY*chevronSize);
-    ctx.lineTo(tipX,tipY);
-    ctx.lineTo(backX-perpX*chevronSize,backY-perpY*chevronSize);
+    ctx.moveTo(backX + perpX * chevronSize * 0.7, backY + perpY * chevronSize * 0.7);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(backX - perpX * chevronSize * 0.7, backY - perpY * chevronSize * 0.7);
     ctx.stroke();
 
-    d+=chevronInterval;
+    d += chevronInterval;
+    count++;
   }
-
-  // 終点にも矢じり（大きめ）
-  const ep=pathPts[pathPts.length-1];
-  const ep2=pathPts[Math.max(0,pathPts.length-4)];
-  const edx=ep.x-ep2.x,edy=ep.y-ep2.y;
-  const elen=Math.hypot(edx,edy)||1;
-  const enx=edx/elen,eny=edy/elen;
-  const eperpX=-eny,eperpY=enx;
-  const endSize=chevronSize*1.3;
-  ctx.beginPath();
-  ctx.moveTo(ep.x-enx*endSize+eperpX*endSize,ep.y-eny*endSize+eperpY*endSize);
-  ctx.lineTo(ep.x,ep.y);
-  ctx.lineTo(ep.x-enx*endSize-eperpX*endSize,ep.y-eny*endSize-eperpY*endSize);
-  ctx.stroke();
 
   ctx.restore();
 }
