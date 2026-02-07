@@ -1504,7 +1504,7 @@ function drawStrokes(ctx,strokes){
   }
 }
 function drawStroke(ctx,s){
-  ctx.lineCap='square';ctx.lineJoin='miter';
+  ctx.lineCap='round';ctx.lineJoin='round';
   if(s.type==='bezier'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();if(s.controls.length>0){ctx.moveTo(s.controls[0].sx,s.controls[0].sy);for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);}ctx.stroke();}
   else if(s.type==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='#fff';ctx.lineWidth=s.size;ctx.beginPath();if(s.controls&&s.controls.length>0){ctx.moveTo(s.controls[0].sx,s.controls[0].sy);for(const c of s.controls)ctx.quadraticCurveTo(c.cx,c.cy,c.ex,c.ey);}ctx.stroke();ctx.globalCompositeOperation='source-over';}
   else if(s.type==='line'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();}
@@ -1525,7 +1525,7 @@ function renderStrokePreview(){
   const ctx=layerCtxs[S.layer];
   if(drawingSnapshot){ctx.putImageData(drawingSnapshot,0,0);}else{renderLayer(S.layer,S.frame);}
   if(curPoints.length<2)return;
-  ctx.lineCap='square';ctx.lineJoin='miter';
+  ctx.lineCap='round';ctx.lineJoin='round';
   if(S.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='#fff';ctx.lineWidth=S.penSize*3;}
   else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=S.penColor;ctx.lineWidth=S.penSize;}
   ctx.beginPath();ctx.moveTo(curPoints[0].x,curPoints[0].y);for(let i=1;i<curPoints.length;i++)ctx.lineTo(curPoints[i].x,curPoints[i].y);ctx.stroke();ctx.globalCompositeOperation='source-over';
