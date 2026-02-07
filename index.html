@@ -565,15 +565,18 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 <input type="file" id="file-input-draft" accept="image/*" style="display:none" onchange="handleDraftImage(event)">
 
 <script>
-const LAYER_DEFS=[
-  {id:'draw1',name:'線画1',color:'var(--layer-color-1)',type:'draw'},
-  {id:'draw2',name:'線画2',color:'var(--layer-color-2)',type:'draw'},
-  {id:'draw3',name:'線画3',color:'var(--layer-color-3)',type:'draw'},
-  {id:'draw4',name:'線画4',color:'var(--layer-color-4)',type:'draw'},
-  {id:'draft1',name:'下書き1',color:'var(--draft-color-1)',type:'draft'},
-  {id:'draft2',name:'下書き2',color:'var(--draft-color-2)',type:'draft'},
-  {id:'draft3',name:'下書き3',color:'var(--draft-color-3)',type:'draft'},
-  {id:'draft4',name:'下書き4',color:'var(--draft-color-4)',type:'draft'},
+const LAYER_DEFS = [
+  // 表示名「線画1」だが、実際は一番手前（インデックス0）
+  {id:'draw1_ui', name:'線画1', color:'var(--layer-color-1)', type:'draw'},  // 元の線画4と同じ色
+  {id:'draw2_ui', name:'線画2', color:'var(--layer-color-2)', type:'draw'},
+  {id:'draw3_ui', name:'線画3', color:'var(--layer-color-3)', type:'draw'},
+  {id:'draw4_ui', name:'線画4', color:'var(--layer-color-4)', type:'draw'},  // 元の線画1と同じ色
+
+  // 下書きも同様に名前を逆転
+  {id:'draft1_ui', name:'下書き1', color:'var(--draft-color-4)', type:'draft'},  // 元の下書き4の色
+  {id:'draft2_ui', name:'下書き2', color:'var(--draft-color-3)', type:'draft'},
+  {id:'draft3_ui', name:'下書き3', color:'var(--draft-color-2)', type:'draft'},
+  {id:'draft4_ui', name:'下書き4', color:'var(--draft-color-1)', type:'draft'},  // 元の下書き1の色
 ];
 
 let cuts=[];let currentCut=0;
@@ -756,13 +759,50 @@ function createEmptyCut(name,frames){
   return c;
 }
 function createCanvases(){
-  const ct=document.getElementById('canvas-container');layerCanvases.forEach(c=>c.remove());layerCanvases=[];layerCtxs=[];
-  const bg=document.getElementById('canvas-bg');bg.style.width=S.cw+'px';bg.style.height=S.ch+'px';
-  onionCanvas=document.getElementById('onion-canvas');onionCanvas.width=S.cw;onionCanvas.height=S.ch;onionCtx=onionCanvas.getContext('2d');
-  guideCanvas=document.getElementById('stroke-guide-canvas');guideCanvas.width=S.cw;guideCanvas.height=S.ch;guideCtx=guideCanvas.getContext('2d');
-  pointEditCanvas=document.getElementById('point-edit-overlay');pointEditCanvas.width=S.cw;pointEditCanvas.height=S.ch;pointEditCtx=pointEditCanvas.getContext('2d');
-  overlayCanvas=document.getElementById('stroke-order-overlay');overlayCanvas.width=S.cw;overlayCanvas.height=S.ch;overlayCtx=overlayCanvas.getContext('2d');
-  for(let i=0;i<LAYER_DEFS.length;i++){const c=document.createElement('canvas');c.className='canvas-layer';c.width=S.cw;c.height=S.ch;c.style.width=S.cw+'px';c.style.height=S.ch+'px';ct.appendChild(c);layerCanvases.push(c);const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;layerCtxs.push(ctx);}
+  const ct = document.getElementById('canvas-container');
+  layerCanvases.forEach(c => c.remove());
+  layerCanvases = [];
+  layerCtxs = [];
+
+  const bg = document.getElementById('canvas-bg');
+  bg.style.width = S.cw + 'px';
+  bg.style.height = S.ch + 'px';
+
+  onionCanvas = document.getElementById('onion-canvas');
+  onionCanvas.width = S.cw; onionCanvas.height = S.ch;
+  onionCtx = onionCanvas.getContext('2d');
+
+  guideCanvas = document.getElementById('stroke-guide-canvas');
+  guideCanvas.width = S.cw; guideCanvas.height = S.ch;
+  guideCtx = guideCanvas.getContext('2d');
+
+  pointEditCanvas = document.getElementById('point-edit-overlay');
+  pointEditCanvas.width = S.cw; pointEditCanvas.height = S.ch;
+  pointEditCtx = pointEditCanvas.getContext('2d');
+
+  overlayCanvas = document.getElementById('stroke-order-overlay');
+  overlayCanvas.width = S.cw; overlayCanvas.height = S.ch;
+  overlayCtx = overlayCanvas.getContext('2d');
+
+  // ★★★ ここを逆順に変更 ★★★
+  // 下書き4 → … → 線画1 の順でDOMに追加 → 線画1が一番手前になる
+  for(let i = LAYER_DEFS.length - 1; i >= 0; i--){
+    const c = document.createElement('canvas');
+    c.className = 'canvas-layer';
+    c.width = S.cw;
+    c.height = S.ch;
+    c.style.width = S.cw + 'px';
+    c.style.height = S.ch + 'px';
+    ct.appendChild(c);           // ← ここで追加する順が重要
+    layerCanvases.push(c);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    layerCtxs.push(ctx);
+  }
+
+  // layerCanvases と layerCtxs の順番は LAYER_DEFS と一致させるために reverse
+  layerCanvases.reverse();
+  layerCtxs.reverse();
 }
 function centerCanvas(){
   const a=document.getElementById('canvas-area').getBoundingClientRect();
@@ -1407,9 +1447,16 @@ function erasePointSequence(pts,grid,cellSize,r,strokeSize){
 // 描画
 // ===========================================================
 function renderAll(){
-  for(let i=0;i<LAYER_DEFS.length;i++){renderLayer(i,S.frame);layerCanvases[i].style.display=layerVis[i]?'block':'none';}
-  renderOnion();renderStrokeGuide();renderPointEditOverlay();renderStrokeEditOverlay();
-  updateStrokePointSlider();updateFrameGuide();
+  for(let i = LAYER_DEFS.length - 1; i >= 0; i--){
+    renderLayer(i, S.frame);
+    layerCanvases[i].style.display = layerVis[i] ? 'block' : 'none';
+  }
+  renderOnion();           // オニオンも逆順にする
+  renderStrokeGuide();
+  renderPointEditOverlay();
+  renderStrokeEditOverlay();
+  updateStrokePointSlider();
+  updateFrameGuide();
 }
 
 function updateFrameGuide(){
@@ -2171,29 +2218,58 @@ document.addEventListener('mouseup',()=>{_strokePointSliderBak=null;});
 // オニオンスキン
 // ===========================================================
 function renderOnion(){
-  onionCtx.clearRect(0,0,S.cw,S.ch);
-  if(!document.getElementById('onion-enabled').checked){onionCanvas.style.display='none';return;}
-  onionCanvas.style.display='block';
-  const pv=+document.getElementById('onion-prev').value||0,nx=+document.getElementById('onion-next').value||0;
-  for(let d=1;d<=pv;d++){const fi=S.frame-d;if(fi<0)continue;drawOnionFrame(fi,`rgba(233,69,96,${0.25/d})`);}
-  for(let d=1;d<=nx;d++){const fi=S.frame+d;if(fi>=CTF())continue;drawOnionFrame(fi,`rgba(78,205,196,${0.25/d})`);}
+  onionCtx.clearRect(0, 0, S.cw, S.ch);
+  if(!document.getElementById('onion-enabled').checked){
+    onionCanvas.style.display = 'none';
+    return;
+  }
+  onionCanvas.style.display = 'block';
+
+  const pv = +document.getElementById('onion-prev').value || 0;
+  const nx = +document.getElementById('onion-next').value || 0;
+
+  for(let d = 1; d <= pv; d++){
+    const fi = S.frame - d;
+    if(fi < 0) continue;
+    drawOnionFrame(fi, `rgba(233,69,96,${0.25/d})`);
+  }
+  
+  for(let d = 1; d <= nx; d++){
+    const fi = S.frame + d;
+    if(fi >= CTF()) continue;
+    drawOnionFrame(fi, `rgba(78,205,196,${0.25/d})`);
+  }
 }
-function drawOnionFrame(fi,col){
-  for(let li=0;li<LAYER_DEFS.length;li++){
-    // レイヤー表示＆オニオン表示の両方がONの場合のみ描画
-    if(!layerVis[li]||!onionLayerVis[li])continue;
-    const fr=getEffectiveFrame(li,fi);if(!fr)continue;
+function drawOnionFrame(fi, col){
+  // ★ ここも逆順にした
+  for(let li = LAYER_DEFS.length - 1; li >= 0; li--){
+    if(!layerVis[li] || !onionLayerVis[li]) continue;
+
+    const fr = getEffectiveFrame(li, fi);
+    if(!fr) continue;
+
     if(fr.draftImg){
-      const key='onion-'+li+'-'+fi;
-      if(draftImgCache[key]&&draftImgCache[key].src===fr.draftImg){
-        onionCtx.globalAlpha=0.5;onionCtx.drawImage(draftImgCache[key],0,0,S.cw,S.ch);onionCtx.globalAlpha=1;
-      }else{
-        const img=new Image();
-        img.onload=()=>{draftImgCache[key]=img;onionCtx.globalAlpha=0.5;onionCtx.drawImage(img,0,0,S.cw,S.ch);onionCtx.globalAlpha=1;};
-        img.src=fr.draftImg;
+      const key = 'onion-' + li + '-' + fi;
+      if(draftImgCache[key] && draftImgCache[key].src === fr.draftImg){
+        onionCtx.globalAlpha = 0.5;
+        onionCtx.drawImage(draftImgCache[key], 0, 0, S.cw, S.ch);
+        onionCtx.globalAlpha = 1;
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          draftImgCache[key] = img;
+          onionCtx.globalAlpha = 0.5;
+          onionCtx.drawImage(img, 0, 0, S.cw, S.ch);
+          onionCtx.globalAlpha = 1;
+        };
+        img.src = fr.draftImg;
       }
     }
-    for(const s of fr.strokes){if(s.type==='eraser')continue;drawStroke(onionCtx,{...s,color:col});}
+
+    for(const s of fr.strokes){
+      if(s.type === 'eraser') continue;
+      drawStroke(onionCtx, { ...s, color: col });
+    }
   }
 }
 function toggleOnionSkin(){const cb=document.getElementById('onion-enabled');cb.checked=!cb.checked;renderAll();}
@@ -2364,7 +2440,15 @@ function removeCut(){if(cuts.length<=1){notify('最後のカットは削除で�
 // ===========================================================
 function updateLayerList(){
   const list=document.getElementById('layer-list');list.innerHTML='';
-  for(let i=LAYER_DEFS.length-1;i>=0;i--){const d=LAYER_DEFS[i];const item=document.createElement('div');item.className='layer-item'+(i===S.layer?' active':'');item.onclick=()=>{S.layer=i;updateLayerList();renderAll();};
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    const d = LAYER_DEFS[i];
+    const item = document.createElement('div');
+    item.className = 'layer-item' + (i === S.layer ? ' active' : '');
+    item.onclick = () => {
+      S.layer = i;
+      updateLayerList();
+      renderAll();
+    };
     const dot=document.createElement('div');dot.className='layer-color-dot';dot.style.background=d.color;
     const nm=document.createElement('div');nm.className='layer-name';nm.textContent=d.name;
     const vis=document.createElement('button');vis.className='layer-vis-btn'+(layerVis[i]?'':' hidden');vis.textContent=layerVis[i]?'👁':'🚫';vis.title='表示切替';
@@ -2378,214 +2462,324 @@ function clearAllLayers(){if(!confirm('現在のフレームの全レイヤー�
 function duplicateFrame(){pushUndo();const nf=S.frame+1;if(nf<CTF()){CF()[S.layer].frames[nf]=JSON.parse(JSON.stringify(CF()[S.layer].frames[S.frame]));goToFrame(nf);notify('フレームを複製');}}
 
 // ===========================================================
-// タイムライン
+// タイムライン（レイヤーラベルと行を逆順表示）
 // ===========================================================
 function updateTimeline(){
-  const tf=CTF();const hd=document.getElementById('tl-header');hd.innerHTML='';
-  for(let f=0;f<tf;f++){const d=document.createElement('div');d.className='tl-frame-num'+(f===S.frame?' current':'');d.textContent=f+1;d.onclick=()=>goToFrame(f);hd.appendChild(d);}
-  const lb=document.getElementById('tl-layer-labels-inner');lb.innerHTML='';
-  for(let i=0;i<LAYER_DEFS.length;i++){const d=document.createElement('div');d.className='tl-layer-label'+(i===S.layer?' active':'');d.onclick=()=>{S.layer=i;updateLayerList();updateTimeline();renderAll();};const dot=document.createElement('span');dot.className='dot';dot.style.background=LAYER_DEFS[i].color;d.appendChild(dot);d.appendChild(document.createTextNode(LAYER_DEFS[i].name));lb.appendChild(d);}
-  const rows=document.getElementById('tl-rows');rows.innerHTML='';
-  for(let i=0;i<LAYER_DEFS.length;i++){
-    const row=document.createElement('div');row.className='tl-row';
-    for(let f=0;f<tf;f++){
-      const cell=document.createElement('div');cell.className='tl-cell';
-      if(f===S.frame)cell.classList.add('current-frame');
-      const fr=CF()[i].frames[f];
-      const hasData=fr&&(fr.strokes.length>0||fr.draftImg);
-      if(hasData)cell.classList.add('has-data');
-      const dk=i+'-'+f;const durVal=CFD()[dk]||1;
-      if(durVal>1){cell.classList.add('hold-start');cell.title=durVal+'f持続';}
-      else{
-        const eidx=getEffectiveFrameIdx(i,f);
-        if(eidx!==f){cell.classList.add('hold-frame');cell.title='← フレーム'+(eidx+1)+'の持続';}
+  const tf = CTF();
+  const hd = document.getElementById('tl-header');
+  hd.innerHTML = '';
+  for(let f = 0; f < tf; f++){
+    const d = document.createElement('div');
+    d.className = 'tl-frame-num' + (f === S.frame ? ' current' : '');
+    d.textContent = f + 1;
+    d.onclick = () => goToFrame(f);
+    hd.appendChild(d);
+  }
+
+  const lb = document.getElementById('tl-layer-labels-inner');
+  lb.innerHTML = '';
+
+  // レイヤーラベルを逆順（線画1が一番上）
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    const d = LAYER_DEFS[i];
+    const label = document.createElement('div');
+    label.className = 'tl-layer-label' + (i === S.layer ? ' active' : '');
+    label.onclick = () => {
+      S.layer = i;
+      updateLayerList();
+      updateTimeline();
+      renderAll();
+    };
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = d.color;
+    label.appendChild(dot);
+    label.appendChild(document.createTextNode(d.name));
+    lb.appendChild(label);
+  }
+
+  const rows = document.getElementById('tl-rows');
+  rows.innerHTML = '';
+
+  // タイムライン行も逆順（線画1の行が一番上）
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    const row = document.createElement('div');
+    row.className = 'tl-row';
+
+    for(let f = 0; f < tf; f++){
+      const cell = document.createElement('div');
+      cell.className = 'tl-cell';
+      if(f === S.frame) cell.classList.add('current-frame');
+
+      const fr = CF()[i].frames[f];
+      const hasData = fr && (fr.strokes.length > 0 || fr.draftImg);
+      if(hasData) cell.classList.add('has-data');
+
+      const dk = i + '-' + f;
+      const durVal = CFD()[dk] || 1;
+      if(durVal > 1){
+        cell.classList.add('hold-start');
+        cell.title = durVal + 'f持続';
+      } else {
+        const eidx = getEffectiveFrameIdx(i, f);
+        if(eidx !== f){
+          cell.classList.add('hold-frame');
+          cell.title = '← フレーム' + (eidx + 1) + 'の持続';
+        }
       }
-      // 選択状態
-      if(tlSelected.has(i+'-'+f))cell.classList.add('tl-selected');
-      // ドラッグゴースト
-      if(tlDragging&&tlDragCurrent!==null){
-        const delta=tlDragCurrent-(tlDragSource?tlDragSource.fi:0);
-        const selArr=tlGetSelectedOnLayer(i);
-        if(selArr.length>0){
+
+      if(tlSelected.has(i + '-' + f)) cell.classList.add('tl-selected');
+
+      if(tlDragging && tlDragCurrent !== null){
+        const delta = tlDragCurrent - (tlDragSource ? tlDragSource.fi : 0);
+        const selArr = tlGetSelectedOnLayer(i);
+        if(selArr.length > 0){
           for(const sf of selArr){
-            if(f===sf+delta&&f!==sf)cell.classList.add('tl-drag-ghost');
+            if(f === sf + delta && f !== sf) cell.classList.add('tl-drag-ghost');
           }
-        }else if(tlDragSource&&tlDragSource.li===i&&f===tlDragSource.fi+delta&&f!==tlDragSource.fi){
+        } else if(tlDragSource && tlDragSource.li === i && f === tlDragSource.fi + delta && f !== tlDragSource.fi){
           cell.classList.add('tl-drag-ghost');
         }
       }
-      cell.dataset.li=i;cell.dataset.fi=f;
-      cell.addEventListener('mousedown',e=>tlCellMouseDown(e,i,f));
-      cell.addEventListener('contextmenu',e=>showCtxMenu(e,i,f));
+
+      cell.dataset.li = i;
+      cell.dataset.fi = f;
+      cell.addEventListener('mousedown', e => tlCellMouseDown(e, i, f));
+      cell.addEventListener('contextmenu', e => showCtxMenu(e, i, f));
       row.appendChild(cell);
-    }rows.appendChild(row);
+    }
+    rows.appendChild(row);
   }
-  document.getElementById('current-frame-display').textContent=S.frame+1;
-  document.getElementById('total-frame-display').textContent=tf;
-  document.getElementById('info-frames').value=tf;
-  // タイムライン高さを全レイヤー表示に合わせて動的計算
+
+  document.getElementById('current-frame-display').textContent = S.frame + 1;
+  document.getElementById('total-frame-display').textContent = tf;
+  document.getElementById('info-frames').value = tf;
+
   updateTimelineHeight();
-  // スクロール同期
   setupTimelineScrollSync();
 }
+
+// 以下は変更なし（そのままコピー）
 function updateTimelineHeight(){
-  // コントロール行（実際の高さ）+ ヘッダー(18) + 全レイヤー行(24*N) + 余白(4)
-  const ctrl=document.getElementById('timeline-controls');
-  const ctrlH=ctrl?ctrl.offsetHeight:32;
-  const h=ctrlH+18+LAYER_DEFS.length*24+4;
-  document.getElementById('timeline-panel').style.height=h+'px';
+  const ctrl = document.getElementById('timeline-controls');
+  const ctrlH = ctrl ? ctrl.offsetHeight : 32;
+  const h = ctrlH + 18 + LAYER_DEFS.length * 24 + 4;
+  document.getElementById('timeline-panel').style.height = h + 'px';
 }
+
 function setupTimelineScrollSync(){
-  const framesArea=document.getElementById('tl-frames-area');
-  const labelsEl=document.getElementById('tl-layer-labels');
-  // 縦スクロール同期：フレームエリアのスクロールに合わせてラベルも動く
-  framesArea.onscroll=()=>{
-    labelsEl.scrollTop=framesArea.scrollTop;
+  const framesArea = document.getElementById('tl-frames-area');
+  const labelsEl = document.getElementById('tl-layer-labels');
+  framesArea.onscroll = () => {
+    labelsEl.scrollTop = framesArea.scrollTop;
   };
 }
-function goToFrame(f){if(f<0||f>=CTF())return;S.frame=f;updateTimeline();renderAll();}
 
-// タイムラインキーフレーム ドラッグ＆選択
-function tlGetSelectedOnLayer(li){
-  const arr=[];
-  for(const k of tlSelected){const p=k.split('-');if(+p[0]===li)arr.push(+p[1]);}
-  arr.sort((a,b)=>a-b);return arr;
+function goToFrame(f){
+  if(f < 0 || f >= CTF()) return;
+  S.frame = f;
+  updateTimeline();
+  renderAll();
 }
-function tlCellMouseDown(e,li,fi){
-  if(e.button!==0)return;
+
+function tlGetSelectedOnLayer(li){
+  const arr = [];
+  for(const k of tlSelected){
+    const p = k.split('-');
+    if(+p[0] === li) arr.push(+p[1]);
+  }
+  arr.sort((a,b) => a - b);
+  return arr;
+}
+
+function tlCellMouseDown(e, li, fi){
+  if(e.button !== 0) return;
   e.preventDefault();
-  const fr=CF()[li].frames[fi];
-  const hasData=fr&&(fr.strokes.length>0||fr.draftImg);
-  const durVal=CFD()[li+'-'+fi]||1;
-  const isKeyCell=hasData||durVal>1;
-  const key=li+'-'+fi;
+
+  const fr = CF()[li].frames[fi];
+  const hasData = fr && (fr.strokes.length > 0 || fr.draftImg);
+  const durVal = CFD()[li + '-' + fi] || 1;
+  const isKeyCell = hasData || durVal > 1;
+  const key = li + '-' + fi;
 
   if(e.shiftKey){
-    // Shift+クリック: 選択トグル（データのあるセルのみ）
     if(isKeyCell){
-      if(tlSelected.has(key))tlSelected.delete(key);
+      if(tlSelected.has(key)) tlSelected.delete(key);
       else tlSelected.add(key);
     }
-    S.layer=li;goToFrame(fi);updateLayerList();
+    S.layer = li;
+    goToFrame(fi);
+    updateLayerList();
     return;
   }
 
-  // 選択セルをドラッグ開始判定
-  if(tlSelected.has(key)||isKeyCell){
-    tlDragging=true;
-    tlDragSource={li,fi};
-    tlDragCurrent=fi;
-    // 選択中でない場合はこのセル単体をドラッグ
-    if(!tlSelected.has(key)&&!e.shiftKey){tlSelected.clear();if(isKeyCell)tlSelected.add(key);}
+  if(tlSelected.has(key) || isKeyCell){
+    tlDragging = true;
+    tlDragSource = { li, fi };
+    tlDragCurrent = fi;
 
-    const onMove=ev=>{
-      const cell=document.elementFromPoint(ev.clientX,ev.clientY);
-      if(cell&&cell.dataset&&cell.dataset.fi!==undefined){
-        const newFi=+cell.dataset.fi;
-        if(newFi!==tlDragCurrent){
-          tlDragCurrent=newFi;
+    if(!tlSelected.has(key) && !e.shiftKey){
+      tlSelected.clear();
+      if(isKeyCell) tlSelected.add(key);
+    }
+
+    const onMove = ev => {
+      const cell = document.elementFromPoint(ev.clientX, ev.clientY);
+      if(cell && cell.dataset && cell.dataset.fi !== undefined){
+        const newFi = +cell.dataset.fi;
+        if(newFi !== tlDragCurrent){
+          tlDragCurrent = newFi;
           updateTimeline();
         }
       }
     };
-    const onUp=ev=>{
-      document.removeEventListener('mousemove',onMove);
-      document.removeEventListener('mouseup',onUp);
-      if(tlDragging&&tlDragCurrent!==null&&tlDragCurrent!==tlDragSource.fi){
+
+    const onUp = ev => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+
+      if(tlDragging && tlDragCurrent !== null && tlDragCurrent !== tlDragSource.fi){
         tlApplyDrag();
-      }else{
-        // クリックのみ（ドラッグなし）→ フレーム移動
-        if(!e.shiftKey)tlSelected.clear();
-        S.layer=li;goToFrame(fi);updateLayerList();
+      } else {
+        if(!e.shiftKey) tlSelected.clear();
+        S.layer = li;
+        goToFrame(fi);
+        updateLayerList();
       }
-      tlDragging=false;tlDragSource=null;tlDragCurrent=null;
+
+      tlDragging = false;
+      tlDragSource = null;
+      tlDragCurrent = null;
       updateTimeline();
     };
-    document.addEventListener('mousemove',onMove);
-    document.addEventListener('mouseup',onUp);
-  }else{
-    // 空セルクリック
-    if(!e.shiftKey)tlSelected.clear();
-    S.layer=li;goToFrame(fi);updateLayerList();
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  } else {
+    if(!e.shiftKey) tlSelected.clear();
+    S.layer = li;
+    goToFrame(fi);
+    updateLayerList();
   }
 }
+
 function tlApplyDrag(){
-  if(!tlDragSource)return;
-  const delta=tlDragCurrent-tlDragSource.fi;
-  if(delta===0)return;
+  if(!tlDragSource) return;
+  const delta = tlDragCurrent - tlDragSource.fi;
+  if(delta === 0) return;
   pushUndo();
 
-  // 全選択レイヤーのフレーム移動を収集
-  const layerMap={};// li -> [fi1,fi2,...]
+  const layerMap = {};
   for(const k of tlSelected){
-    const p=k.split('-');const li=+p[0],fi=+p[1];
-    if(!layerMap[li])layerMap[li]=[];
+    const p = k.split('-');
+    const li = +p[0], fi = +p[1];
+    if(!layerMap[li]) layerMap[li] = [];
     layerMap[li].push(fi);
   }
 
-  const tf=CTF();
+  const tf = CTF();
   for(const liStr in layerMap){
-    const li=+liStr;
-    const srcFrames=layerMap[li].sort((a,b)=>a-b);
-    const frames=CF()[li].frames;
-    const dur=CFD();
+    const li = +liStr;
+    const srcFrames = layerMap[li].sort((a,b) => a - b);
+    const frames = CF()[li].frames;
+    const dur = CFD();
 
-    // 移動先が範囲外ならスキップ
-    const minDst=srcFrames[0]+delta,maxDst=srcFrames[srcFrames.length-1]+delta;
-    if(minDst<0||maxDst>=tf)continue;
+    const minDst = srcFrames[0] + delta;
+    const maxDst = srcFrames[srcFrames.length - 1] + delta;
+    if(minDst < 0 || maxDst >= tf) continue;
 
-    // 元データを退避
-    const saved=[];
+    const saved = [];
     for(const fi of srcFrames){
-      saved.push({fi,data:JSON.parse(JSON.stringify(frames[fi])),dur:dur[li+'-'+fi]||1});
+      saved.push({
+        fi,
+        data: JSON.parse(JSON.stringify(frames[fi])),
+        dur: dur[li + '-' + fi] || 1
+      });
     }
-    // 元位置をクリア
+
     for(const fi of srcFrames){
-      frames[fi]={strokes:[],draftImg:null};
-      delete dur[li+'-'+fi];
+      frames[fi] = { strokes: [], draftImg: null };
+      delete dur[li + '-' + fi];
     }
-    // 移動先に配置（既存データとスワップ）
-    const displaced=[];
+
+    const displaced = [];
     for(const s of saved){
-      const dst=s.fi+delta;
-      // 移動先が他の選択セルの元位置でない場合、退避
+      const dst = s.fi + delta;
       if(!srcFrames.includes(dst)){
-        displaced.push({fi:dst,data:JSON.parse(JSON.stringify(frames[dst])),dur:dur[li+'-'+dst]||1});
+        displaced.push({
+          fi: dst,
+          data: JSON.parse(JSON.stringify(frames[dst])),
+          dur: dur[li + '-' + dst] || 1
+        });
       }
-      frames[dst]=s.data;
-      if(s.dur>1)dur[li+'-'+dst]=s.dur;else delete dur[li+'-'+dst];
+      frames[dst] = s.data;
+      if(s.dur > 1) dur[li + '-' + dst] = s.dur;
+      else delete dur[li + '-' + dst];
     }
-    // 退避データを元位置に配置
+
     for(const d of displaced){
-      // 空になった元位置を探す
       for(const fi of srcFrames){
-        const curFr=frames[fi];
-        if(curFr&&curFr.strokes.length===0&&!curFr.draftImg){
-          frames[fi]=d.data;
-          if(d.dur>1)dur[li+'-'+fi]=d.dur;
+        const curFr = frames[fi];
+        if(curFr && curFr.strokes.length === 0 && !curFr.draftImg){
+          frames[fi] = d.data;
+          if(d.dur > 1) dur[li + '-' + fi] = d.dur;
           break;
         }
       }
     }
   }
 
-  // 選択セットを移動先に更新
-  const newSel=new Set();
+  const newSel = new Set();
   for(const k of tlSelected){
-    const p=k.split('-');const li=+p[0],fi=+p[1];
-    const dst=fi+delta;
-    if(dst>=0&&dst<tf)newSel.add(li+'-'+dst);
+    const p = k.split('-');
+    const li = +p[0], fi = +p[1];
+    const dst = fi + delta;
+    if(dst >= 0 && dst < tf) newSel.add(li + '-' + dst);
   }
-  tlSelected=newSel;
-  goToFrame(Math.max(0,Math.min(tf-1,S.frame+delta)));
-}
-function goNextFrame(){goToFrame(S.frame+1);}function goPrevFrame(){goToFrame(S.frame-1);}
-function goFirstFrame(){goToFrame(0);}function goLastFrame(){goToFrame(CTF()-1);}
-function addFrame(){CC().totalFrames++;for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.push({strokes:[],draftImg:null});updateTimeline();}
-function removeFrame(){if(CTF()<=1)return;pushUndo();for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(S.frame,1);CC().totalFrames--;if(S.frame>=CTF())S.frame=CTF()-1;updateTimeline();renderAll();}
-function insertKeyframe(){pushUndo();const f=S.frame+1;for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames.splice(f,0,{strokes:[],draftImg:null});CC().totalFrames++;goToFrame(f);notify('キーフレームを挿入');}
-function updateFPS(){S.fps=+document.getElementById('fps-input').value||12;}
+  tlSelected = newSel;
 
+  goToFrame(Math.max(0, Math.min(tf - 1, S.frame + delta)));
+}
+
+function goNextFrame(){ goToFrame(S.frame + 1); }
+function goPrevFrame(){ goToFrame(S.frame - 1); }
+function goFirstFrame(){ goToFrame(0); }
+function goLastFrame(){ goToFrame(CTF() - 1); }
+
+function addFrame(){
+  CC().totalFrames++;
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    CF()[i].frames.push({ strokes: [], draftImg: null });
+  }
+  updateTimeline();
+}
+
+function removeFrame(){
+  if(CTF() <= 1) return;
+  pushUndo();
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    CF()[i].frames.splice(S.frame, 1);
+  }
+  CC().totalFrames--;
+  if(S.frame >= CTF()) S.frame = CTF() - 1;
+  updateTimeline();
+  renderAll();
+}
+
+function insertKeyframe(){
+  pushUndo();
+  const f = S.frame + 1;
+  for(let i = 0; i < LAYER_DEFS.length; i++){
+    CF()[i].frames.splice(f, 0, { strokes: [], draftImg: null });
+  }
+  CC().totalFrames++;
+  goToFrame(f);
+  notify('キーフレームを挿入');
+}
+
+function updateFPS(){
+  S.fps = +document.getElementById('fps-input').value || 12;
+}
 // ===========================================================
 // 再生
 // ===========================================================
