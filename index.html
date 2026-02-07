@@ -296,9 +296,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   padding: 8px 0;
 }
 
+
 .color-swatch {
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;           /* 角丸四角 */
   border: 2px solid #444;       /* 暗めの枠線 */
   cursor: pointer;
@@ -413,23 +414,18 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <button class="color-swatch" data-color="#e94560" title="赤"></button>
       <button class="color-swatch" data-color="#0000ff" title="青"></button>
       <button class="color-swatch" data-color="#ffff00" title="黄"></button>
-      
-    </div>
-  </div>
-</div>
-<div class="panel-section" style="border-bottom:none; padding-bottom:0;">
-  <div class="panel-header" style="font-size:10px; padding:4px 10px;">
+
+
+
+      <div class="panel-header" style="font-size:12px; padding:4px 10px;">
     背景透過色
   </div>
-  <div class="panel-body" style="padding:6px 10px 2px;">
-    <div id="color-palette" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:left;">
-      
-      <!-- 既存の4色 -->
-      
-      <button class="color-swatch" data-color="#87FF42" title="背景透過"></button>
-    </div>
+  <div id="color-palette-trans" style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
+  <button class="color-swatch" data-color="#87FF42" title="背景透過"></button>
+</div>
   </div>
 </div>
+
     <div class="panel-section">
       <div class="panel-header">カット管理</div>
       <div class="panel-body" id="cut-list" style="max-height:108px;overflow-y:auto;"></div>
@@ -3170,7 +3166,7 @@ function initColorPalette() {
 
 // 色が変わったとき・ツールが変わったときなどに呼び出す
 function updateActiveColorButton() {
-  const buttons = document.querySelectorAll('#color-palette .color-swatch');
+  const buttons = document.querySelectorAll('#color-palette #color-palette2 .color-swatch');
   buttons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.color.toLowerCase() === S.penColor.toLowerCase());
   });
