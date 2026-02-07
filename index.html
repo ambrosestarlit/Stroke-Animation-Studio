@@ -2270,17 +2270,37 @@ function drawOnionFrame(fi, col){
 }
 function toggleOnionSkin(){const cb=document.getElementById('onion-enabled');cb.checked=!cb.checked;renderAll();}
 
-// ===========================================================
-// 書き順ガイド（CACANI風 - 前フレーム）
-// ===========================================================
-function renderStrokeGuide(){
-  guideCtx.clearRect(0,0,S.cw,S.ch);
-  if(!document.getElementById('stroke-guide-enabled').checked){guideCanvas.style.display='none';return;}
-  guideCanvas.style.display='block';
-  const prevFi=S.frame-1;if(prevFi<0)return;
-  for(let li=0;li<4;li++){if(!layerVis[li])continue;const fr=getEffectiveFrame(li,prevFi);if(!fr)continue;
-    const strokes=[...fr.strokes].filter(s=>s.type!=='eraser').sort((a,b)=>a.order-b.order);
-    for(let idx=0;idx<strokes.length;idx++)drawStrokeGuideAnnotation(guideCtx,strokes[idx],idx+1);
+function renderStrokeGuide() {
+  guideCtx.clearRect(0, 0, S.cw, S.ch);
+
+  // チェックが入っていない or 非表示なら何もしない
+  if (!document.getElementById('stroke-guide-enabled').checked) {
+    guideCanvas.style.display = 'none';
+    return;
+  }
+
+  guideCanvas.style.display = 'block';
+
+  const prevFi = S.frame - 1;
+  if (prevFi < 0) return;
+
+  // ★ ここを変更：全レイヤーではなく、現在選択中のレイヤーのみ処理
+  const li = S.layer;
+
+  // そのレイヤーが非表示設定ならガイドも出さない
+  if (!layerVis[li]) return;
+
+  const fr = getEffectiveFrame(li, prevFi);
+  if (!fr) return;
+
+  // 消しゴムは除外し、描画順（order）でソート
+  const strokes = [...fr.strokes]
+    .filter(s => s.type !== 'eraser')
+    .sort((a, b) => a.order - b.order);
+
+  // 各ストロークに番号を振ってガイド描画
+  for (let idx = 0; idx < strokes.length; idx++) {
+    drawStrokeGuideAnnotation(guideCtx, strokes[idx], idx + 1);
   }
 }
 function drawStrokeGuideAnnotation(ctx, s, num) {
