@@ -934,7 +934,17 @@ function setupEvents(){
   document.getElementById('pen-smooth').addEventListener('input',e=>{S.penSmooth=+e.target.value;document.getElementById('pen-smooth-val').textContent=S.penSmooth;});
   document.getElementById('pen-color').addEventListener('input',e=>{S.penColor=e.target.value;});
   document.getElementById('stroke-point-slider').addEventListener('input',onStrokePointSliderInput);
-  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{b.addEventListener('click',()=>selectTool(b.dataset.tool));});
+  // ツールボタンのイベントリスナー（修正版：より堅牢に）
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+    b.addEventListener('click',(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const tool = b.dataset.tool;
+      if(tool){
+        selectTool(tool);
+      }
+    });
+  });
   area.addEventListener('mousemove',e=>{const cp=document.getElementById('cursor-preview');const sz=S.penSize*S.zoom;cp.style.width=sz+'px';cp.style.height=sz+'px';cp.style.left=(e.clientX-sz/2)+'px';cp.style.top=(e.clientY-sz/2)+'px';});
   area.addEventListener('mouseenter',()=>{if(S.tool!=='point'&&S.tool!=='move'&&S.tool!=='stroke')document.getElementById('cursor-preview').style.display='block';});
   area.addEventListener('mouseleave',()=>{document.getElementById('cursor-preview').style.display='none';});
@@ -1053,7 +1063,16 @@ function onKeyDown(e){
 }
 function onKeyUp(e){if(e.code==='Space')spaceHeld=false;if(!e.ctrlKey&&!e.metaKey)ctrlHeld=false;}
 function selectTool(t){
-  S.tool=t;document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+  console.log('selectTool called with:', t); // デバッグ用
+  if(!t) {
+    console.error('Tool is undefined or null');
+    return;
+  }
+  S.tool=t;
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+    const isActive = b.dataset.tool===t;
+    b.classList.toggle('active', isActive);
+  });
   // ツール切替時にポイント編集状態クリア
   if(t!=='point'){selectedStrokeIdx=-1;dragPointInfo=null;selectedPointInfo=null;}
   if(t!=='stroke'){strokeEditIdx=-1;strokeEditMode='';strokeEditCorners=null;strokeEditCenter=null;strokeEditAnchor=null;}
@@ -1069,6 +1088,8 @@ function selectTool(t){
   if(t==='point'||t==='stroke'){area.style.cursor='default';cp.style.display='none';}
   else if(t==='move'){area.style.cursor='move';cp.style.display='none';}
   else{area.style.cursor='crosshair';cp.style.display='';}
+  updateActiveColorButton(); // カラーパレット更新
+  console.log('Tool changed to:', S.tool); // デバッグ用
 }
 
 // ===========================================================
@@ -2930,14 +2951,6 @@ document.getElementById('pen-color').addEventListener('input', e => {
   S.penColor = e.target.value;
   updateActiveColorButton();   // ← 追加
 });
-
-// ツール変更時にも色パレットのアクティブ状態を更新したい場合は
-// selectTool() 関数の最後に追加
-function selectTool(t) {
-  // … 既存の処理 …
-  
-  updateActiveColorButton();   // ← 追加
-}
 
 // init() の最後に呼び出し
 initColorPalette();
