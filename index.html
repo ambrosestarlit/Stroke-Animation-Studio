@@ -2610,12 +2610,48 @@ function playNext(){
 // 自動中割
 // ===========================================================
 function showInbetweenDialog(){document.getElementById('inb-start').value=S.frame+1;document.getElementById('inb-end').value=Math.min(S.frame+2,CTF());document.getElementById('inb-count').value=3;document.getElementById('inbetween-dialog').classList.add('show');}
-function generateInbetweens(){
-  const sf=+document.getElementById('inb-start').value-1,ef=+document.getElementById('inb-end').value-1,cnt=+document.getElementById('inb-count').value,ease=document.getElementById('inb-easing').value;
-  if(sf<0||ef>=CTF()||sf>=ef){notify('フレーム範囲が不正です');return;}pushUndo();
-  const sS=CF()[S.layer].frames[sf].strokes,eS=CF()[S.layer].frames[ef].strokes;
-  for(let i=0;i<cnt;i++){const t=(i+1)/(cnt+1);const interp=interpStrokes(sS,eS,t,ease);const ins=sf+1+i;for(let li=0;li<LAYER_DEFS.length;li++){CF()[li].frames.splice(ins,0,{strokes:li===S.layer?interp:[],draftImg:null});}CC().totalFrames++;}
-  closeModal('inbetween-dialog');updateTimeline();renderAll();notify(`${cnt}枚の中割を生成`);
+function generateInbetweens() {
+  const sf = +document.getElementById('inb-start').value - 1;
+  const ef = +document.getElementById('inb-end').value - 1;
+  const cnt = +document.getElementById('inb-count').value;
+  const ease = document.getElementById('inb-easing').value;
+
+  if (sf < 0 || ef >= CTF() || sf >= ef || cnt < 1) {
+    notify('フレーム範囲または枚数が不正です');
+    return;
+  }
+
+  pushUndo();
+
+  const targetLayer = S.layer;           // ← ここ！選択中のレイヤーのみ対象
+  const sS = CF()[targetLayer].frames[sf].strokes;
+  const eS = CF()[targetLayer].frames[ef].strokes;
+
+  // 挿入位置は start の直後から cnt 個
+  let insertPos = sf + 1;
+
+  for (let i = 0; i < cnt; i++) {
+    const t = (i + 1) / (cnt + 1);
+    const interp = interpStrokes(sS, eS, t, ease);
+
+    // 選択中のレイヤーにだけ中割フレームを挿入
+    CF()[targetLayer].frames.splice(insertPos, 0, {
+      strokes: interp,
+      draftImg: null
+    });
+
+    insertPos++;  // 次の挿入位置をずらす
+  }
+
+  // totalFrames は変更しない（他のレイヤーは増えない）
+  // CC().totalFrames += cnt;   ← これをコメントアウトまたは削除
+
+  closeModal('inbetween-dialog');
+  updateTimeline();
+  goToFrame(sf + 1);           // 最初の生成フレームに移動
+  renderAll();
+
+  notify(`${cnt}枚の中割をレイヤー${targetLayer + 1}に生成しました`);
 }
 function interpStrokes(sa,sb,t,ease){const et=applyEase(t,ease);const r=[];const mx=Math.max(sa.length,sb.length);for(let i=0;i<mx;i++){const a=i<sa.length?sa[i]:null,b=i<sb.length?sb[i]:null;if(a&&b&&a.type===b.type)r.push(interpOne(a,b,et));else if(a&&!b)r.push(fadeS(a,1-et));else if(!a&&b)r.push(fadeS(b,et));else if(a&&b){et<0.5?r.push(fadeS(a,1-et*2)):r.push(fadeS(b,(et-0.5)*2));}}return r;}
 function interpOne(a,b,t){
