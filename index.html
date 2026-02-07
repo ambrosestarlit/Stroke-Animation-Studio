@@ -338,6 +338,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   <div class="header-sep"></div>
   <button class="header-btn" onclick="showCanvasSizeDialog()">キャンバスサイズ</button>
   <button class="header-btn" onclick="importDraftImage()">下書き読込</button>
+  <button class="header-btn" onclick="importSequenceImages()">📁 連番読込</button>
   <div class="header-sep"></div>
   <button class="header-btn" onclick="undoAction()">↩ 戻す</button>
   <button class="header-btn" onclick="redoAction()">↪ やり直し</button>
@@ -559,6 +560,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 <div id="notification"></div>
 <input type="file" id="file-input-project" accept=".json,.sasp" style="display:none" onchange="handleLoadProject(event)">
 <input type="file" id="file-input-draft" accept="image/*" style="display:none" onchange="handleDraftImage(event)">
+<input type="file" id="file-input-sequence" accept="image/*" multiple style="display:none" onchange="handleSequenceImages(event)">
 
 <script>
 const LAYER_DEFS = [
@@ -3201,7 +3203,116 @@ document.getElementById('pen-color').addEventListener('input', e => {
 // init() の最後に呼び出し
 initColorPalette();
 
+// JavaScript部分の追加 (連番読み込み関数を追加)
 
+// 連番画像読み込みダイアログを開く
+function importSequenceImages(){
+  document.getElementById('file-input-sequence').click();
+}
+
+// 連番画像を処理（修正版）
+function handleSequenceImages(e){
+  const files=Array.from(e.target.files);
+  if(!files.length)return;
+  
+  console.log('選択されたファイル数:', files.length); // デバッグ用
+  
+  // ファイル名でソート(数字部分を考慮)
+  files.sort((a,b)=>{
+    const numA=extractNumber(a.name);
+    const numB=extractNumber(b.name);
+    if(numA!==numB)return numA-numB;
+    return a.name.localeCompare(b.name); // 数字が同じ場合は名前順
+  });
+  
+  notify(`${files.length}枚の画像を読み込み中...`);
+  
+  const startFrame=S.frame;
+  const targetLayer=S.layer;
+  
+  // フレーム数が足りない場合は追加
+  const neededFrames=startFrame+files.length;
+  if(neededFrames>CTF()){
+    const diff=neededFrames-CTF();
+    for(let i=0;i<diff;i++){
+      for(let li=0;li<LAYER_DEFS.length;li++){
+        CF()[li].frames.push({strokes:[],draftImg:null});
+      }
+    }
+    CC().totalFrames=neededFrames;
+  }
+  
+  pushUndo();
+  
+  let loadedCount=0;
+  const totalFiles=files.length;
+  
+  // 各画像を順次読み込み
+  files.forEach((file,idx)=>{
+    const reader=new FileReader();
+    
+    reader.onerror=()=>{
+      console.error('ファイル読み込みエラー:', file.name);
+      loadedCount++;
+      checkComplete();
+    };
+    
+    reader.onload=ev=>{
+      const dataUrl=ev.target.result;
+      const frameIdx=startFrame+idx;
+      
+      console.log(`読み込み: ${file.name} → フレーム${frameIdx+1}`); // デバッグ用
+      
+      // 対象レイヤーの指定フレームに画像を設定
+      if(frameIdx<CF()[targetLayer].frames.length){
+        CF()[targetLayer].frames[frameIdx].draftImg=dataUrl;
+        
+        // キャッシュに登録
+        const img=new Image();
+        img.onload=()=>{
+          const key=currentCut+'-'+targetLayer+'-'+frameIdx;
+          draftImgCache[key]=img;
+          loadedCount++;
+          checkComplete();
+        };
+        img.onerror=()=>{
+          console.error('画像デコードエラー:', file.name);
+          loadedCount++;
+          checkComplete();
+        };
+        img.src=dataUrl;
+      }else{
+        console.error('フレームインデックスが範囲外:', frameIdx);
+        loadedCount++;
+        checkComplete();
+      }
+    };
+    
+    reader.readAsDataURL(file);
+  });
+  
+  function checkComplete(){
+    console.log(`進行状況: ${loadedCount}/${totalFiles}`); // デバッグ用
+    if(loadedCount===totalFiles){
+      updateTimeline();
+      renderAll();
+      notify(`${totalFiles}枚の連番画像を読み込みました`);
+      goToFrame(startFrame);
+    }
+  }
+  
+  e.target.value='';
+}
+
+// ファイル名から数字を抽出(連番判定用)
+function extractNumber(filename){
+  // ファイル名から数字部分を抽出（拡張子を除く）
+  const nameWithoutExt=filename.replace(/\.[^.]+$/,'');
+  const match=nameWithoutExt.match(/\d+/g);
+  if(!match||match.length===0)return 0;
+  // 最後の数字グループを使用（通常は連番部分）
+  return parseInt(match[match.length-1],10);
+}
 
 </script>
 
