@@ -172,6 +172,43 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 #tl-frames-area{flex:1;overflow-x:auto;overflow-y:auto;position:relative;}
 #tl-header{position:sticky;top:0;height:18px;background:var(--bg-secondary);border-bottom:1px solid var(--border);z-index:2;display:flex;}
 .tl-frame-num{width:28px;min-width:28px;height:18px;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-muted);border-right:1px solid var(--border);cursor:pointer;}
+/* 右側スクロール領域を「横に無制限に伸ばせる」ようにする */
+#tl-right-scrollable {
+  flex: 1 1 auto;                  /* flex-growを効かせる */
+  overflow-y: auto;                /* 縦スクロールは残す */
+  overflow-x: visible !important;  /* ← 横ははみ出し許可（重要！） */
+  position: relative;
+  min-width: 0;                    /* flexの子が縮まないように */
+}
+
+/* フレーム領域自体も横に伸びることを保証 */
+#tl-frames-area {
+  display: block;                  /* flex から block に変更（横伸び重視） */
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+  overflow: visible !important;
+  white-space: nowrap;             /* セルが折り返さない */
+}
+
+/* ヘッダーと行も横に無制限 */
+#tl-header,
+.tl-row {
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+  display: flex;
+  flex-wrap: nowrap;               /* 絶対に折り返さない */
+}
+
+/* セル自体は固定幅のまま */
+.tl-cell,
+.tl-frame-num {
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  flex: 0 0 28px;
+}
 .tl-frame-num.current{background:var(--accent);color:#fff;}
 #tl-rows{position:relative;}
 .tl-row{height:24px;display:flex;border-bottom:1px solid var(--border);}
@@ -186,6 +223,82 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 .tl-cell.hold-start::after{content:'';width:8px;height:8px;background:var(--warning);border-radius:50%;}
 .tl-cell.tl-selected{outline:2px solid var(--accent);outline-offset:-2px;z-index:1;}
 .tl-cell.tl-drag-ghost{background:rgba(233,69,96,0.25);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1;}
+#tl-scroll-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+}
+#tl-layer-labels {
+  flex-shrink: 0;
+  width: 100px;
+}
+#tl-frames-area {
+  display: block;                  /* flex から block に変更（横伸び重視） */
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+  overflow: visible !important;
+  white-space: nowrap;             /* セルが折り返さない */
+}
+#tl-scroll-container::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;  /* 横スクロールバーの高さ */
+}
+
+#tl-scroll-container::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+#tl-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 6px;
+}
+
+#tl-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+/* 音声波形をタイムライン全体に合わせて自由に伸ばす */
+#tl-audio-row {
+  height: 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  width: auto !important;           /* 自動幅強制 */
+  min-width: 100% !important;
+  max-width: none !important;       /* 上限解除 */
+  overflow: visible !important;     /* はみ出し許可 */
+}
+
+#tl-audio-wave {
+  height: 100%;
+  position: relative;
+  overflow: visible !important;     /* hidden → visible に変更 */
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+}
+
+#audio-waveform-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+  pointer-events: none;
+}
+#audio-playhead {
+  position: absolute;
+  top: 0;
+  height: 24px;
+  width: 2px;
+  background: #e94560;
+  pointer-events: none;
+}
 
 /* コンテキストメニュー */
 #ctx-menu{display:none;position:fixed;background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;padding:4px 0;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,0.6);min-width:160px;}
@@ -325,6 +438,114 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 .color-swatch[data-color="#ffff00"] { background: #ffff00; }
 .color-swatch[data-color="#87FF42"] { background: #87FF42; }
 
+/* 音声トラック行 */
+#tl-audio-row {
+  height: 60px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+#tl-audio-label {
+  width: 100px;
+  height: 60px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+#tl-audio-wave {
+  flex: 1;
+  height: 60px;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#audio-waveform-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 60px;
+}
+
+#audio-playhead {
+  position: absolute;
+  top: 0;
+  height: 60px;
+  width: 2px;
+  background: #e94560;
+  pointer-events: none;
+  display: none;
+}
+
+#tl-audio-wave,
+#audio-waveform-canvas {
+  cursor: default !important;
+}
+
+/* 左右分離レイアウト用 */
+#timeline-body {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+#tl-left-fixed {
+  width: 100px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+}
+
+#tl-right-scrollable {
+  flex: 1 1 auto;                  /* flex-growを効かせる */
+  overflow-y: auto;                /* 縦スクロールは残す */
+  overflow-x: visible !important;  /* ← 横ははみ出し許可（重要！） */
+  position: relative;
+  min-width: 0;                    /* flexの子が縮まないように */
+}
+/* ヘッダーと行も横に無制限 */
+#tl-header,
+.tl-row {
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: none !important;
+  display: flex;
+  flex-wrap: nowrap;               /* 絶対に折り返さない */
+}
+/* フレーム番号ヘッダーは横スクロールしても上部に固定 */
+#tl-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+/* 音声ラベルも左固定側に移動（必要に応じて） */
+#tl-audio-label-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-tertiary);
+}
+
+/* 音声波形は右側スクロール領域に追従 */
+#tl-audio-row {
+  position: relative;
+  z-index: 1;
+}
+
+
 </style>
 </head>
 <body>
@@ -337,6 +558,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   <button class="header-btn" onclick="loadProject()">📂 開く</button>
   <div class="header-sep"></div>
   <button class="header-btn" onclick="showCanvasSizeDialog()">キャンバスサイズ</button>
+  <button class="header-btn" onclick="importAudioFile()">🎵 音声読込</button>
   <button class="header-btn" onclick="importDraftImage()">下書き読込</button>
   <button class="header-btn" onclick="importSequenceImages()">📁 連番読込</button>
   <div class="header-sep"></div>
@@ -427,6 +649,22 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   </div>
 </div>
 
+<div class="panel-section">
+  <div class="panel-header">音声コントロール</div>
+  <div class="panel-body">
+    <div class="onion-row">
+      <label>音量</label>
+      <input type="range" id="audio-volume" min="0" max="150" value="100" style="width:60px;" oninput="updateAudioVolume(this.value)">
+      <span id="audio-volume-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">100%</span>
+    </div>
+    <div class="onion-row">
+      <button class="layer-action-btn" onclick="toggleAudioMute()" id="audio-mute-btn">🔊 ミュート</button>
+      <button class="layer-action-btn" onclick="deleteAudio()">🗑️ 削除</button>
+    </div>
+    <div id="audio-info" style="font-size:10px;color:var(--text-muted);margin-top:4px;">音声なし</div>
+  </div>
+</div>
+
     <div class="panel-section">
       <div class="panel-header">カット管理</div>
       <div class="panel-body" id="cut-list" style="max-height:108px;overflow-y:auto;"></div>
@@ -512,12 +750,35 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <span id="zoom-slider-val" style="font-size:10px;color:var(--text-secondary);min-width:28px;">100%</span>
     </div>
   </div>
-  <div id="timeline-body">
-    <div id="tl-layer-labels"><div id="tl-layer-labels-inner"></div></div>
-    <div id="tl-frames-area"><div id="tl-header"></div><div id="tl-rows"></div></div>
+  <div id="timeline-body" style="display: flex; height: 100%; overflow: hidden;">
+
+  <!-- 左側：固定（レイヤー名 + 音声ラベル） -->
+  <div id="tl-left-fixed" style="width: 100px; flex-shrink: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg-secondary); border-right: 1px solid var(--border);">
+    <div id="tl-layer-labels">
+      <div id="tl-layer-labels-inner"></div>
+    </div>
+    <!-- 音声ラベルはここに固定で入れる -->
+    <div id="tl-audio-label-row" class="tl-layer-label" style="height:24px; background:var(--bg-tertiary); font-weight:bold; border-bottom:1px solid var(--border);">
+      <span class="dot" style="background:#e94560; margin-right:6px;"></span>音声
+    </div>
+  </div>
+
+  <!-- 右側：スクロール可能（フレームヘッダー + セル + 音声波形） -->
+  <div id="tl-right-scrollable" style="flex: 1; overflow: auto; position: relative;">
+    <div id="tl-frames-area">
+      <div id="tl-header"></div>
+      <div id="tl-rows"></div>
+      <!-- 音声波形行はここ（最下部）に固定配置 -->
+      <div id="tl-audio-row" style="height:24px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:sticky; bottom:0; z-index:1; width:100%; min-width: fit-content;">
+  <div id="tl-audio-wave" style="height:100%; position:relative; overflow:hidden; width:auto; min-width:100%; white-space:nowrap;">
+    <canvas id="audio-waveform-canvas" style="position:absolute; top:0; left:0; height:100%; width:auto; min-width:100%; pointer-events:none;"></canvas>
+    <div id="audio-playhead" style="position:absolute; top:0; height:100%; width:2px; background:#e94560; pointer-events:none; display:none; z-index:2;"></div>
   </div>
 </div>
+    </div>
+  </div>
 
+</div>
 <!-- コンテキストメニュー -->
 <div id="ctx-menu">
   <div class="ctx-item" onclick="ctxCopyFrame()">📋 フレームをコピー<span class="ctx-shortcut">Ctrl+C</span></div>
@@ -561,7 +822,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 <input type="file" id="file-input-project" accept=".json,.sasp" style="display:none" onchange="handleLoadProject(event)">
 <input type="file" id="file-input-draft" accept="image/*" style="display:none" onchange="handleDraftImage(event)">
 <input type="file" id="file-input-sequence" accept="image/*" multiple style="display:none" onchange="handleSequenceImages(event)">
-
+<input type="file" id="file-input-audio" accept="audio/*" style="display:none" onchange="handleAudioFile(event)">
 <script>
 const LAYER_DEFS = [
   // 表示名「線画1」だが、実際は一番手前（インデックス0）
@@ -579,6 +840,19 @@ const LAYER_DEFS = [
 
 let cuts=[];let currentCut=0;
 let S={cw:2600,ch:1500,fps:12,frame:0,layer:0,tool:'pen',penSize:2,penColor:'#000000',penSmooth:50,zoom:1,rot:0,panX:0,panY:0,playing:false,playTimer:null};
+// 音声管理
+let audioBuffer = null;
+let audioSource = null;
+let audioContext = null;
+let audioGainNode = null;
+let audioState = {
+  file: null,
+  volume: 100,
+  muted: false,
+  duration: 0,
+  startFrame: 0,
+  currentOffset: 0,   // ← ここに追加しても良い
+};
 let layerVis={};let undoStack=[],redoStack=[];const MAX_UNDO=50;
 let layerCanvases=[],layerCtxs=[];
 let onionCanvas,onionCtx,guideCanvas,guideCtx,overlayCanvas,overlayCtx;
@@ -2482,92 +2756,99 @@ function duplicateFrame(){pushUndo();const nf=S.frame+1;if(nf<CTF()){CF()[S.laye
 // ===========================================================
 // タイムライン（レイヤーラベルと行を逆順表示）
 // ===========================================================
-function updateTimeline(){
+function updateTimeline() {
+  // まず音声タイムラインを更新（必要に応じて）
+  updateAudioTimeline();
+
   const tf = CTF();
-  const hd = document.getElementById('tl-header');
-  hd.innerHTML = '';
-  for(let f = 0; f < tf; f++){
-    const d = document.createElement('div');
-    d.className = 'tl-frame-num' + (f === S.frame ? ' current' : '');
-    d.textContent = f + 1;
-    d.onclick = () => goToFrame(f);
-    hd.appendChild(d);
-  }
+  console.log("[updateTimeline] tf =", tf);
+  console.log("[updateTimeline] cuts[currentCut].totalFrames =", cuts[currentCut].totalFrames);
 
-  const lb = document.getElementById('tl-layer-labels-inner');
-  lb.innerHTML = '';
+  // ── 左側：レイヤーラベル（固定） ────────────────
+  const labelsInner = document.getElementById('tl-layer-labels-inner');
+  if (labelsInner) {
+    labelsInner.innerHTML = '';
 
-  // レイヤーラベルを逆順（線画1が一番上）
-  for(let i = 0; i < LAYER_DEFS.length; i++){
-    const d = LAYER_DEFS[i];
-    const label = document.createElement('div');
-    label.className = 'tl-layer-label' + (i === S.layer ? ' active' : '');
-    label.onclick = () => {
-      S.layer = i;
-      updateLayerList();
-      updateTimeline();
-      renderAll();
-    };
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.style.background = d.color;
-    label.appendChild(dot);
-    label.appendChild(document.createTextNode(d.name));
-    lb.appendChild(label);
-  }
-
-  const rows = document.getElementById('tl-rows');
-  rows.innerHTML = '';
-
-  // タイムライン行も逆順（線画1の行が一番上）
-  for(let i = 0; i < LAYER_DEFS.length; i++){
-    const row = document.createElement('div');
-    row.className = 'tl-row';
-
-    for(let f = 0; f < tf; f++){
-      const cell = document.createElement('div');
-      cell.className = 'tl-cell';
-      if(f === S.frame) cell.classList.add('current-frame');
-
-      const fr = CF()[i].frames[f];
-      const hasData = fr && (fr.strokes.length > 0 || fr.draftImg);
-      if(hasData) cell.classList.add('has-data');
-
-      const dk = i + '-' + f;
-      const durVal = CFD()[dk] || 1;
-      if(durVal > 1){
-        cell.classList.add('hold-start');
-        cell.title = durVal + 'f持続';
-      } else {
-        const eidx = getEffectiveFrameIdx(i, f);
-        if(eidx !== f){
-          cell.classList.add('hold-frame');
-          cell.title = '← フレーム' + (eidx + 1) + 'の持続';
-        }
-      }
-
-      if(tlSelected.has(i + '-' + f)) cell.classList.add('tl-selected');
-
-      if(tlDragging && tlDragCurrent !== null){
-        const delta = tlDragCurrent - (tlDragSource ? tlDragSource.fi : 0);
-        const selArr = tlGetSelectedOnLayer(i);
-        if(selArr.length > 0){
-          for(const sf of selArr){
-            if(f === sf + delta && f !== sf) cell.classList.add('tl-drag-ghost');
-          }
-        } else if(tlDragSource && tlDragSource.li === i && f === tlDragSource.fi + delta && f !== tlDragSource.fi){
-          cell.classList.add('tl-drag-ghost');
-        }
-      }
-
-      cell.dataset.li = i;
-      cell.dataset.fi = f;
-      cell.addEventListener('mousedown', e => tlCellMouseDown(e, i, f));
-      cell.addEventListener('contextmenu', e => showCtxMenu(e, i, f));
-      row.appendChild(cell);
+    for (let i = 0; i < LAYER_DEFS.length; i++) {
+      const d = LAYER_DEFS[i];
+      const label = document.createElement('div');
+      label.className = 'tl-layer-label' + (i === S.layer ? ' active' : '');
+      label.onclick = () => {
+        S.layer = i;
+        updateLayerList();
+        updateTimeline();
+        renderAll();
+      };
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = d.color;
+      label.appendChild(dot);
+      label.appendChild(document.createTextNode(d.name));
+      labelsInner.appendChild(label);
     }
-    rows.appendChild(row);
   }
+
+  // ── 右側：フレームヘッダー＋セル ────────────────
+const header = document.getElementById('tl-header');
+if (header) header.innerHTML = '';
+
+const rows = document.getElementById('tl-rows');
+if (rows) rows.innerHTML = '';
+
+
+
+console.log("[Timeline] 現在の総フレーム数:", tf); // デバッグ用
+
+// フレーム番号ヘッダー（これが42で止まらないか確認）
+for (let f = 0; f < tf; f++) {
+  const d = document.createElement('div');
+  d.className = 'tl-frame-num' + (f === S.frame ? ' current' : '');
+  d.textContent = f + 1;
+  d.onclick = () => goToFrame(f);
+  header?.appendChild(d);
+}
+
+// 各レイヤーのセル行
+for (let i = 0; i < LAYER_DEFS.length; i++) {
+  const row = document.createElement('div');
+  row.className = 'tl-row';
+  for (let f = 0; f < tf; f++) {  // ← tf まで確実にループ
+    const cell = document.createElement('div');
+    cell.className = 'tl-cell';
+    if (f === S.frame) cell.classList.add('current-frame');
+
+    const fr = CF()[i].frames[f];
+    const hasData = fr && (fr.strokes.length > 0 || fr.draftImg);
+    if (hasData) cell.classList.add('has-data');
+
+    const dk = i + '-' + f;
+    const durVal = CFD()[dk] || 1;
+    if (durVal > 1) {
+      cell.classList.add('hold-start');
+      cell.title = durVal + 'f持続';
+    } else {
+      const eidx = getEffectiveFrameIdx(i, f);
+      if (eidx !== f) {
+        cell.classList.add('hold-frame');
+        cell.title = '← フレーム' + (eidx + 1) + 'の持続';
+      }
+    }
+
+    if (tlSelected.has(i + '-' + f)) cell.classList.add('tl-selected');
+
+    cell.dataset.li = i;
+    cell.dataset.fi = f;
+    cell.addEventListener('mousedown', e => tlCellMouseDown(e, i, f));
+    cell.addEventListener('contextmenu', e => showCtxMenu(e, i, f));
+
+    row.appendChild(cell);
+  }
+  rows?.appendChild(row);
+}
+
+// デバッグ：実際に生成されたセル数を確認
+console.log("[Timeline] 生成されたセル行数:", rows?.children.length);
+console.log("[Timeline] 1行あたりのセル数:", rows?.children[0]?.children.length);
 
   document.getElementById('current-frame-display').textContent = S.frame + 1;
   document.getElementById('total-frame-display').textContent = tf;
@@ -2575,31 +2856,80 @@ function updateTimeline(){
 
   updateTimelineHeight();
   setupTimelineScrollSync();
+
+  // 必要に応じて音声再生ヘッドも更新
+  updateAudioPlayhead();
+}
+function updateAudioTimeline() {
+  // もう動的に生成・削除しない（HTMLで固定配置済みなので）
+  // 波形だけ更新すればOK
+  if (audioBuffer) {
+    drawAudioWaveform();
+  } else {
+    const canvas = document.getElementById('audio-waveform-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'var(--text-muted)';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('音声なし', canvas.width / 2, canvas.height / 2 + 3);
+    }
+  }
+  updateAudioPlayhead();
+}
+
+function updateAudioPlayhead() {
+  const playhead = document.getElementById('audio-playhead');
+  if (!playhead) return;
+
+  if (audioState.file && audioBuffer) {
+    const cellWidth = 28;
+    const x = S.frame * cellWidth;
+    playhead.style.left = x + 'px';
+    playhead.style.display = 'block';
+  } else {
+    playhead.style.display = 'none';
+  }
 }
 
 // 以下は変更なし（そのままコピー）
 function updateTimelineHeight(){
   const ctrl = document.getElementById('timeline-controls');
   const ctrlH = ctrl ? ctrl.offsetHeight : 32;
-  const h = ctrlH + 18 + LAYER_DEFS.length * 24 + 4;
+  const h = ctrlH + 18 + (LAYER_DEFS.length + 1) * 24 + 4;
   document.getElementById('timeline-panel').style.height = h + 'px';
 }
 
-function setupTimelineScrollSync(){
-  const framesArea = document.getElementById('tl-frames-area');
-  const labelsEl = document.getElementById('tl-layer-labels');
-  framesArea.onscroll = () => {
-    labelsEl.scrollTop = framesArea.scrollTop;
-  };
-}
+function setupTimelineScrollSync() {
+  const left = document.getElementById('tl-left-fixed');
+  const right = document.getElementById('tl-right-scrollable');
 
-function goToFrame(f){
-  if(f < 0 || f >= CTF()) return;
+  if (!left || !right) return;
+
+  // 右側の縦スクロール → 左側に反映
+  right.addEventListener('scroll', () => {
+    left.scrollTop = right.scrollTop;
+  });
+
+  // 左側の縦スクロール → 右側に反映（双方向同期）
+  left.addEventListener('scroll', () => {
+    right.scrollTop = left.scrollTop;
+  });
+}
+function goToFrame(f) {
+  if (f < 0 || f >= CTF()) return;
+  if (S.frame === f) return;
+
   S.frame = f;
-  updateTimeline();
-  renderAll();
-}
 
+  // 音声再生ヘッドを即時更新
+  updateAudioPlayhead();
+
+  renderAll();
+  updateTimeline();
+  document.getElementById('current-frame-display').textContent = S.frame + 1;
+}
 function tlGetSelectedOnLayer(li){
   const arr = [];
   for(const k of tlSelected){
@@ -2801,23 +3131,180 @@ function updateFPS(){
 // ===========================================================
 // 再生
 // ===========================================================
-function togglePlay(){S.playing?stopPlay():startPlay();}
-function startPlay(){S.playing=true;document.getElementById('play-btn').classList.add('active');document.getElementById('play-btn').textContent='⏸';playNext();}
-function stopPlay(){S.playing=false;document.getElementById('play-btn').classList.remove('active');document.getElementById('play-btn').textContent='▶';if(S.playTimer){clearTimeout(S.playTimer);S.playTimer=null;}}
-function playNext(){
-  if(!S.playing)return;
-  // 全レイヤーの持続値を確認し、最大持続でスキップ
-  let skip=1;
-  for(let li=0;li<LAYER_DEFS.length;li++){
-    const d=CFD()[li+'-'+S.frame]||1;
-    if(d>skip)skip=d;
+function togglePlay() {
+  if (S.playing) {
+    stopPlay();
+  } else {
+    // ★★★ これが決め手：再生開始前に現在のフレームを完全に同期 ★★★
+    // これで startPlay() が呼ばれる時点で S.frame が最新になる
+    goToFrame(S.frame);   // ← これを必ず最初に呼ぶ
+    startPlay();
   }
-  let nf=S.frame+skip;
-  if(nf>=CTF())nf=0;
-  goToFrame(nf);
-  S.playTimer=setTimeout(playNext,1000/S.fps);
+}
+function startPlay() {
+  if (S.playing) return;
+
+  goToFrame(S.frame);  // フレーム同期
+
+  S.playing = true;
+  document.getElementById('play-btn').classList.add('active');
+  document.getElementById('play-btn').textContent = '⏸';
+
+  if (audioBuffer && audioContext) {
+    if (audioSource) {
+      try { audioSource.stop(); } catch (e) {}
+      audioSource = null;
+    }
+
+    audioSource = audioContext.createBufferSource();
+    audioSource.buffer = audioBuffer;
+    audioSource.connect(audioGainNode);
+    audioSource.loop = false;
+
+    const fps = S.fps || 12;
+    const startFrame = Number(audioState.startFrame || 0);
+    const currentFrame = S.frame;
+    let relativeFrame = currentFrame - startFrame;
+
+    let startTime = 0;
+    if (relativeFrame > 0) {
+      startTime = relativeFrame / fps;
+    }
+
+    // ★ 重要：頭から再生（relativeFrame ≤ 0）の場合、少しだけ進めてリセット回避
+    if (relativeFrame <= 0) {
+      startTime = 0.05;  // 50ms進めてから開始（ブラウザの初回位置バグ回避）
+      console.log("頭から再生検知 → 50msオフセットで開始");
+    }
+
+    if (startTime >= audioBuffer.duration) {
+      startTime = audioBuffer.duration - 0.01;
+    }
+
+    audioSource.start(audioContext.currentTime, startTime);
+
+    console.log("startPlay:", {
+      currentFrame,
+      startFrame,
+      relativeFrame,
+      startTime: startTime.toFixed(3) + "秒"
+    });
+
+    notify(`フレーム ${currentFrame + 1} から再生開始（音声内: ${startTime.toFixed(2)}秒）`);
+  }
+
+  lastFrameTime = 0;
+  accumulatedTime = 0;
+  S.playTimer = requestAnimationFrame(playNext);
 }
 
+function stopPlay() {
+  S.playing = false;
+  document.getElementById('play-btn').classList.remove('active');
+  document.getElementById('play-btn').textContent = '▶';
+
+  if (S.playTimer) {
+    cancelAnimationFrame(S.playTimer);
+    S.playTimer = null;
+  }
+
+  if (audioSource) {
+    try {
+      audioSource.stop();
+      audioSource.disconnect();
+    } catch (e) {}
+    audioSource = null;
+  }
+
+  lastFrameTime = 0;
+  accumulatedTime = 0;
+
+  // AudioContext を一時停止→再開して状態をクリア（これが効くことが多い）
+  if (audioContext) {
+    audioContext.suspend().then(() => {
+      audioContext.resume();
+    });
+  }
+
+  // 自動スクロールを止めるために現在の位置を維持（必要ならリセット）
+  const scrollContainer = document.getElementById('tl-scroll-container');
+  // scrollContainer.scrollTo({ left: 0, behavior: 'smooth' }); // 最初に戻す場合
+}
+
+let lastFrameTime = 0;
+let accumulatedTime = 0;
+
+function playNext(timestamp) {
+  if (!S.playing) return;
+
+  // ★ 追加：毎フレーム開始時に現在のフレームを確実に使う
+  const currentFrame = S.frame;
+
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  const deltaTime = timestamp - lastFrameTime;
+  lastFrameTime = timestamp;
+
+  accumulatedTime += deltaTime;
+
+  const frameInterval = 1000 / S.fps;
+
+  while (accumulatedTime >= frameInterval) {
+    let skip = 1;
+    for (let li = 0; li < LAYER_DEFS.length; li++) {
+      const d = CFD()[li + '-' + currentFrame] || 1; // ← currentFrameを使う
+      if (d > skip) skip = d;
+    }
+
+    let nf = currentFrame + skip;
+    const totalFrames = CTF();
+
+    if (nf >= totalFrames) {
+      nf = 0;
+    }
+
+    goToFrame(nf);
+
+    accumulatedTime -= frameInterval;
+
+    if (accumulatedTime > frameInterval * 5) {
+      accumulatedTime = frameInterval;
+    }
+  }
+// ★★★ ここに自動スクロールを追加 ★★★
+  if (S.playing) {
+    autoScrollTimeline();
+  }
+  S.playTimer = requestAnimationFrame(playNext);
+}
+
+function autoScrollTimeline() {
+  const scrollContainer = document.getElementById('tl-scroll-container');
+  if (!scrollContainer) return;
+
+  const cellWidth = 28;
+  const headX = S.frame * cellWidth;              // 再生ヘッドのX座標（タイムライン全体基準）
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const scrollLeft = scrollContainer.scrollLeft;  // 現在のスクロール位置
+  const viewportWidth = containerRect.width;      // 表示領域の幅
+
+  // 再生ヘッドがビューポートの右端からどれだけ右にあるか
+  const headRelativeToViewport = headX - scrollLeft;
+
+  // 右端から「ビューポート幅の70%」を超えたらスクロール開始
+  const scrollTriggerPoint = viewportWidth * 0.7;
+
+  if (headRelativeToViewport > scrollTriggerPoint) {
+    // どれだけスクロールするか（スムーズに追従）
+    const scrollAmount = headRelativeToViewport - scrollTriggerPoint + 100; // 少し余裕を持たせる
+    const targetScroll = scrollLeft + scrollAmount;
+
+    // 自然なスクロール（急激すぎない）
+    scrollContainer.scrollTo({
+      left: targetScroll,
+      behavior: 'smooth'  // または 'auto' で即時
+    });
+  }
+}
 // ===========================================================
 // 自動中割
 // ===========================================================
@@ -2895,17 +3382,30 @@ function saveProject(){
   const pn=getProjectName();
   const p={version:2,appName:'StrokeAnimationStudio',projectName:pn,cw:S.cw,ch:S.ch,fps:S.fps,cuts,currentCut,frame:S.frame,layer:S.layer,layerVis,onionLayerVis,
     frameGuide:{w:frameGuideW,h:frameGuideH,enabled:document.getElementById('frame-guide-enabled').checked},
-    popupImages:project.popupImages||[]};
+    popupImages:project.popupImages||[],
+  audio: audioState  };
   const b=new Blob([JSON.stringify(p)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=pn+'.sasp';a.click();URL.revokeObjectURL(a.href);notify('保存: '+pn+'.sasp');
 }
 function loadProject(){document.getElementById('file-input-project').click();}
 function handleLoadProject(e){
-  const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=ev=>{try{
-    const p=JSON.parse(ev.target.result);if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = async ev => {
+    try {
+      const p = JSON.parse(ev.target.result);if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
     S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
     if(p.version>=2){cuts=p.cuts;currentCut=p.currentCut||0;}else{cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];currentCut=0;}
     S.frame=p.frame||0;S.layer=p.layer||0;layerVis=p.layerVis||{};
+    // 音声データの読み込み
+      if (p.audio) {
+        audioState = p.audio;
+        if (audioState.file) {
+          await initAudioContext();
+          updateAudioInfo();
+        }
+      }
     // オニオンレイヤー表示設定の読み込み
     if(p.onionLayerVis){onionLayerVis=p.onionLayerVis;}else{for(let i=0;i<LAYER_DEFS.length;i++)onionLayerVis[i]=true;}
     if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
@@ -2925,7 +3425,12 @@ function handleLoadProject(e){
     }
     draftImgCache={};createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
     renderAll();undoStack=[];redoStack=[];notify('読み込みました');
-  }catch(err){notify('エラー: '+err.message);}};rd.readAsText(f);e.target.value='';
+  } catch (err) {
+      notify('エラー: ' + err.message);
+    }
+  };
+  rd.readAsText(f);
+  e.target.value = '';
 }
 
 // ===========================================================
@@ -3313,6 +3818,221 @@ function extractNumber(filename){
   // 最後の数字グループを使用（通常は連番部分）
   return parseInt(match[match.length-1],10);
 }
+
+function importAudioFile() {
+  document.getElementById('file-input-audio').click();
+}
+
+async function handleAudioFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    audioState.file = ev.target.result;
+
+    // ★★★ ここに挿入 ★★★
+    audioState.startFrame = 0;  // 読み込み成功時に必ず0に固定
+
+    await initAudioContext();
+
+    notify('音声を読み込みました: ' + file.name);
+    updateAudioInfo();
+    updateAudioTimeline();
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+async function initAudioContext() {
+  if (!audioState.file) return;
+
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioGainNode = audioContext.createGain();
+    audioGainNode.connect(audioContext.destination);
+  }
+
+  // Base64からArrayBufferに変換
+  const base64Data = audioState.file.split(',')[1];
+  const binaryData = atob(base64Data);
+  const arrayBuffer = new ArrayBuffer(binaryData.length);
+  const view = new Uint8Array(arrayBuffer);
+  for (let i = 0; i < binaryData.length; i++) {
+    view[i] = binaryData.charCodeAt(i);
+  }
+
+  audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  audioState.duration = audioBuffer.duration;
+
+  // フレーム自動拡張
+  const fps = S.fps || 12;
+  const requiredFrames = Math.ceil(audioState.duration * fps) + 48;
+  const currentTotal = CTF();
+  if (requiredFrames > currentTotal) {
+    const diff = requiredFrames - currentTotal;
+    for (let i = 0; i < diff; i++) {
+      for (let li = 0; li < LAYER_DEFS.length; li++) {
+        CF()[li].frames.push({ strokes: [], draftImg: null });
+      }
+    }
+    CC().totalFrames = requiredFrames;
+    console.log("拡張後 totalFrames =", CC().totalFrames); // ← 追加：確認用
+    notify(`音声長さ(${audioState.duration.toFixed(1)}秒)に合わせてフレーム数を ${requiredFrames} に自動拡張しました`);
+  }
+  // ★★★ ここを追加 ★★★
+  updateTimeline();          // 横線・セル・ヘッダーを再生成
+drawAudioWaveform();       // 波形も再描画
+renderAll();               // キャンバス側も更新
+
+// さらに強制的に現在のフレーム数を表示更新
+document.getElementById('total-frame-display').textContent = CTF();
+document.getElementById('info-frames').value = CTF();
+
+  
+
+  drawAudioWaveform();
+  updateAudioTimeline();
+}
+
+function updateAudioVolume(val) {
+  audioState.volume = +val;
+  document.getElementById('audio-volume-val').textContent = val + '%';
+  if (audioGainNode) {
+    audioGainNode.gain.value = audioState.muted ? 0 : (audioState.volume / 100);
+  }
+}
+
+function toggleAudioMute() {
+  audioState.muted = !audioState.muted;
+  const btn = document.getElementById('audio-mute-btn');
+  btn.textContent = audioState.muted ? '🔇 ミュート解除' : '🔊 ミュート';
+  if (audioGainNode) {
+    audioGainNode.gain.value = audioState.muted ? 0 : (audioState.volume / 100);
+  }
+}
+
+function deleteAudio() {
+  if (!confirm('音声を削除しますか？')) return;
+  audioState.file = null;
+  audioBuffer = null;
+  if (audioSource) {
+    audioSource.stop();
+    audioSource = null;
+  }
+  updateAudioInfo();
+  updateAudioTimeline();
+  notify('音声を削除しました');
+}
+
+function updateAudioInfo() {
+  const info = document.getElementById('audio-info');
+  if (audioState.file) {
+    const duration = audioState.duration.toFixed(2);
+    info.textContent = `長さ: ${duration}秒`;
+  } else {
+    info.textContent = '音声なし';
+  }
+}
+
+function drawAudioWaveform() {
+  if (!audioBuffer) return;
+
+  const canvas = document.getElementById('audio-waveform-canvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const fps = S.fps || 12;
+  const cellWidth = 28;
+  const audioDuration = audioBuffer.duration || 1;
+  const totalPixels = Math.ceil(audioDuration * fps * cellWidth);
+
+  // キャンバスサイズを音声長さに合わせる
+  canvas.width = totalPixels;
+  canvas.height = 24;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 薄い背景
+  ctx.fillStyle = 'rgba(78, 205, 196, 0.03)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const sampleRate = audioBuffer.sampleRate;
+  const channelData = audioBuffer.getChannelData(0); // 左チャンネル
+
+  const threshold = 0.012;          // これ以下なら無音扱い（調整可：0.008〜0.025）
+  const minSilencePixels = 5;       // これ以上無音が続いたら線を切る（ちらつき防止）
+
+  const samplesPerPixel = sampleRate / (fps * cellWidth);
+
+  ctx.strokeStyle = '#4ecdc4';      // 線の色
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  let isSpeaking = false;
+  let lastDrawX = -1;
+
+  for (let px = 0; px <= totalPixels; px++) {
+    const time = px / (fps * cellWidth);
+    const startSample = Math.floor(time * sampleRate);
+    const endSample = Math.min(
+      Math.floor((time + 1/(fps*cellWidth)) * sampleRate),
+      channelData.length
+    );
+
+    // そのピクセル区間の最大振幅
+    let maxAmp = 0;
+    for (let s = startSample; s < endSample && s < channelData.length; s++) {
+      maxAmp = Math.max(maxAmp, Math.abs(channelData[s]));
+    }
+
+    const x = px;
+    const y = canvas.height / 2;  // 常に中央の水平線
+
+    if (maxAmp > threshold) {
+      // 喋ってる
+      if (!isSpeaking) {
+        // 喋り始めた
+        isSpeaking = true;
+        lastDrawX = x;
+      }
+      // 線を繋げる
+      if (lastDrawX >= 0) {
+        ctx.beginPath();
+        ctx.moveTo(lastDrawX, y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+      lastDrawX = x;
+    } else {
+      // 無音
+      if (isSpeaking) {
+        // 喋りが終わった
+        // 最後の線を終端まで引く
+        if (lastDrawX >= 0) {
+          ctx.beginPath();
+          ctx.moveTo(lastDrawX, y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+        // 無音が長く続いたら完全にリセット
+        if (x - lastDrawX >= minSilencePixels) {
+          lastDrawX = -1;
+        }
+      }
+      isSpeaking = false;
+    }
+  }
+
+  // 最後に喋ってる状態が続いていたら終端まで線を引く
+  if (isSpeaking && lastDrawX >= 0) {
+    ctx.beginPath();
+    ctx.moveTo(lastDrawX, y);
+    ctx.lineTo(totalPixels, y);
+    ctx.stroke();
+  }
+}
+
 
 </script>
 
