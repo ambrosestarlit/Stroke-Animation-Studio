@@ -717,6 +717,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 
 <div id="timeline-panel">
   <div id="timeline-controls">
+
     <button class="tl-btn" onclick="goFirstFrame()" title="最初">⏮</button>
     <button class="tl-btn" onclick="goPrevFrame()" title="前">◀</button>
     <button class="tl-btn" id="play-btn" onclick="togglePlay()" title="再生/停止">▶</button>
@@ -729,7 +730,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="header-sep"></div>
     <span class="tl-info">フレーム: <span id="current-frame-display">1</span>/<span id="total-frame-display">24</span></span>
     <div class="header-sep"></div>
-    <span class="tl-info">FPS:</span><input type="number" id="fps-input" value="12" min="1" max="60" onchange="updateFPS()">
+    <span class="tl-info">FPS:</span><input type="number" id="fps-input" value="24" min="1" max="60" onchange="updateFPS()">
     <div class="header-sep"></div>
     <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
     <div class="header-sep"></div>
@@ -769,10 +770,13 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <div id="tl-header"></div>
       <div id="tl-rows"></div>
       <!-- 音声波形行はここ（最下部）に固定配置 -->
-      <div id="tl-audio-row" style="height:24px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:sticky; bottom:0; z-index:1; width:100%; min-width: fit-content;">
-  <div id="tl-audio-wave" style="height:100%; position:relative; overflow:hidden; width:auto; min-width:100%; white-space:nowrap;">
-    <canvas id="audio-waveform-canvas" style="position:absolute; top:0; left:0; height:100%; width:auto; min-width:100%; pointer-events:none;"></canvas>
-    <div id="audio-playhead" style="position:absolute; top:0; height:100%; width:2px; background:#e94560; pointer-events:none; display:none; z-index:2;"></div>
+      <!-- 元の波形部分をコメントアウトまたは削除して、以下のようにシンプルに -->
+<div id="tl-audio-row" style="height:24px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:sticky; bottom:0; z-index:1; width:100%; min-width:fit-content; display:flex; align-items:center; padding-left:8px;">
+  <div style="color:#e94560; font-weight:bold; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" id="audio-filename-display">
+    音声なし
+  </div>
+  <div style="margin-left:12px; font-size:10px; color:var(--text-muted);" id="audio-duration-display">
+    <!-- 長さとか表示したい場合はここ -->
   </div>
 </div>
     </div>
@@ -825,11 +829,11 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 <input type="file" id="file-input-audio" accept="audio/*" style="display:none" onchange="handleAudioFile(event)">
 <script>
 const LAYER_DEFS = [
-  // 表示名「線画1」だが、実際は一番手前（インデックス0）
-  {id:'draw1_ui', name:'線画1', color:'var(--layer-color-1)', type:'draw'},  // 元の線画4と同じ色
-  {id:'draw2_ui', name:'線画2', color:'var(--layer-color-2)', type:'draw'},
-  {id:'draw3_ui', name:'線画3', color:'var(--layer-color-3)', type:'draw'},
-  {id:'draw4_ui', name:'線画4', color:'var(--layer-color-4)', type:'draw'},  // 元の線画1と同じ色
+  // 表示名「原画1」だが、実際は一番手前（インデックス0）
+  {id:'draw1_ui', name:'原画1', color:'var(--layer-color-1)', type:'draw'},  // 元の原画4と同じ色
+  {id:'draw2_ui', name:'原画2', color:'var(--layer-color-2)', type:'draw'},
+  {id:'draw3_ui', name:'原画3', color:'var(--layer-color-3)', type:'draw'},
+  {id:'draw4_ui', name:'原画4', color:'var(--layer-color-4)', type:'draw'},  // 元の原画1と同じ色
 
   // 下書きも同様に名前を逆転
   {id:'draft1_ui', name:'下書き1', color:'var(--draft-color-4)', type:'draft'},  // 元の下書き4の色
@@ -839,7 +843,7 @@ const LAYER_DEFS = [
 ];
 
 let cuts=[];let currentCut=0;
-let S={cw:2600,ch:1500,fps:12,frame:0,layer:0,tool:'pen',penSize:2,penColor:'#000000',penSmooth:50,zoom:1,rot:0,panX:0,panY:0,playing:false,playTimer:null};
+let S={cw:2600,ch:1500,fps:24,frame:0,layer:0,tool:'pen',penSize:2,penColor:'#000000',penSmooth:50,zoom:1,rot:0,panX:0,panY:0,playing:false,playTimer:null};
 // 音声管理
 let audioBuffer = null;
 let audioSource = null;
@@ -1057,7 +1061,7 @@ function createCanvases(){
   overlayCtx = overlayCanvas.getContext('2d');
 
   // ★★★ ここを逆順に変更 ★★★
-  // 下書き4 → … → 線画1 の順でDOMに追加 → 線画1が一番手前になる
+  // 下書き4 → … → 原画1 の順でDOMに追加 → 原画1が一番手前になる
   for(let i = LAYER_DEFS.length - 1; i >= 0; i--){
     const c = document.createElement('canvas');
     c.className = 'canvas-layer';
@@ -3144,13 +3148,19 @@ function togglePlay() {
 function startPlay() {
   if (S.playing) return;
 
-  goToFrame(S.frame);  // フレーム同期
+  goToFrame(S.frame);  // フレームを確実に同期
 
   S.playing = true;
   document.getElementById('play-btn').classList.add('active');
   document.getElementById('play-btn').textContent = '⏸';
 
   if (audioBuffer && audioContext) {
+    // コンテキストがsuspendされてる場合、強制resume
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(e => console.warn("resume失敗:", e));
+    }
+
+    // 既存ソースをクリーンアップ
     if (audioSource) {
       try { audioSource.stop(); } catch (e) {}
       audioSource = null;
@@ -3161,7 +3171,7 @@ function startPlay() {
     audioSource.connect(audioGainNode);
     audioSource.loop = false;
 
-    const fps = S.fps || 12;
+    const fps = S.fps || 24;
     const startFrame = Number(audioState.startFrame || 0);
     const currentFrame = S.frame;
     let relativeFrame = currentFrame - startFrame;
@@ -3171,26 +3181,53 @@ function startPlay() {
       startTime = relativeFrame / fps;
     }
 
-    // ★ 重要：頭から再生（relativeFrame ≤ 0）の場合、少しだけ進めてリセット回避
-    if (relativeFrame <= 0) {
-      startTime = 0.05;  // 50ms進めてから開始（ブラウザの初回位置バグ回避）
-      console.log("頭から再生検知 → 50msオフセットで開始");
+    // ── 先頭無音検出（安全に制限） ────────────────────────────────
+    let realStartSec = 0;
+    const silenceThreshold = 0.04;
+    const maxSkipSec = 0.5;  // ← 最大0.5秒までしかスキップしない（安全）
+    const channelData = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    let silentCount = 0;
+    const maxSilentSamples = Math.min(sampleRate * maxSkipSec, channelData.length);
+
+    for (let i = 0; i < channelData.length; i++) {
+      if (Math.abs(channelData[i]) <= silenceThreshold) {
+        silentCount++;
+        if (silentCount >= sampleRate * 0.05) {  // 50ms連続
+          realStartSec = i / sampleRate;
+          if (realStartSec > maxSkipSec) {
+            realStartSec = maxSkipSec;  // 上限
+          }
+          break;
+        }
+      } else {
+        silentCount = 0;
+      }
     }
 
-    if (startTime >= audioBuffer.duration) {
-      startTime = audioBuffer.duration - 0.01;
+    console.log(`無音検出結果: ${realStartSec.toFixed(3)}秒 (上限${maxSkipSec}秒)`);
+
+    // ── 開始時間計算 ────────────────────────────────────────────────
+    startTime += realStartSec;
+    startTime = Math.max(0, startTime);  // 負にならない
+
+    // 音声の長さを超えないようにクランプ（これが重要！）
+    const maxStartTime = audioBuffer.duration - 0.01;  // 最後0.01秒残す
+    if (startTime > maxStartTime) {
+      startTime = maxStartTime;
+      console.warn(`startTimeが長すぎたのでクランプ: ${startTime.toFixed(3)}秒`);
     }
 
-    audioSource.start(audioContext.currentTime, startTime);
+    console.log(`最終再生開始位置: フレーム${currentFrame + 1} → 音声内 ${startTime.toFixed(3)}秒`);
 
-    console.log("startPlay:", {
-      currentFrame,
-      startFrame,
-      relativeFrame,
-      startTime: startTime.toFixed(3) + "秒"
-    });
-
-    notify(`フレーム ${currentFrame + 1} から再生開始（音声内: ${startTime.toFixed(2)}秒）`);
+    try {
+      audioSource.start(audioContext.currentTime, startTime);
+      console.log("audioSource.start 成功");
+    } catch (err) {
+      console.error("audioSource.start 失敗:", err);
+    }
+  } else {
+    console.log("音声再生スキップ: audioBuffer or audioContext がない");
   }
 
   lastFrameTime = 0;
@@ -3278,32 +3315,23 @@ function playNext(timestamp) {
 }
 
 function autoScrollTimeline() {
-  const scrollContainer = document.getElementById('tl-scroll-container');
+  const scrollContainer = document.getElementById('tl-right-scrollable');
   if (!scrollContainer) return;
 
   const cellWidth = 28;
-  const headX = S.frame * cellWidth;              // 再生ヘッドのX座標（タイムライン全体基準）
-  const containerRect = scrollContainer.getBoundingClientRect();
-  const scrollLeft = scrollContainer.scrollLeft;  // 現在のスクロール位置
-  const viewportWidth = containerRect.width;      // 表示領域の幅
+  const headX = S.frame * cellWidth;
 
-  // 再生ヘッドがビューポートの右端からどれだけ右にあるか
-  const headRelativeToViewport = headX - scrollLeft;
+  const viewportWidth = scrollContainer.clientWidth;
+  const targetRatio = 0.38;  // ← ここはお好み（0.3〜0.45が安定しやすい）
+  const targetOffset = viewportWidth * targetRatio;
 
-  // 右端から「ビューポート幅の70%」を超えたらスクロール開始
-  const scrollTriggerPoint = viewportWidth * 0.7;
+  const targetScrollLeft = Math.max(0, headX - targetOffset);
 
-  if (headRelativeToViewport > scrollTriggerPoint) {
-    // どれだけスクロールするか（スムーズに追従）
-    const scrollAmount = headRelativeToViewport - scrollTriggerPoint + 100; // 少し余裕を持たせる
-    const targetScroll = scrollLeft + scrollAmount;
+  // smooth を完全に外す → 即時移動
+  scrollContainer.scrollLeft = targetScrollLeft;
 
-    // 自然なスクロール（急激すぎない）
-    scrollContainer.scrollTo({
-      left: targetScroll,
-      behavior: 'smooth'  // または 'auto' で即時
-    });
-  }
+  // デバッグ用（後で消してもOK）
+  console.log(`[Scroll] frame=${S.frame} → scrollLeft=${targetScrollLeft}`);
 }
 // ===========================================================
 // 自動中割
@@ -3438,7 +3466,7 @@ function handleLoadProject(e){
 // ===========================================================
 function newProject(){
   if(!confirm('現在の作業を破棄して新規作成しますか？'))return;
-  S.cw=2600;S.ch=1500;S.fps=12;S.frame=0;S.layer=0;cuts=[createEmptyCut('C_001',24)];currentCut=0;
+  S.cw=2600;S.ch=1500;S.fps=24;S.frame=0;S.layer=0;cuts=[createEmptyCut('C_001',24)];currentCut=0;
   for(let i=0;i<LAYER_DEFS.length;i++){layerVis[i]=true;onionLayerVis[i]=true;}
   undoStack=[];redoStack=[];draftImgCache={};
   document.getElementById('project-name-input').value='untitled';document.getElementById('fps-input').value=S.fps;
@@ -3823,22 +3851,22 @@ function importAudioFile() {
   document.getElementById('file-input-audio').click();
 }
 
-async function handleAudioFile(e) {
+function handleAudioFile(e) {
   const file = e.target.files[0];
   if (!file) return;
+
+  audioState.originalFileName = file.name;   // ← 追加！これが大事
 
   const reader = new FileReader();
   reader.onload = async (ev) => {
     audioState.file = ev.target.result;
-
-    // ★★★ ここに挿入 ★★★
-    audioState.startFrame = 0;  // 読み込み成功時に必ず0に固定
+    audioState.startFrame = 0;
 
     await initAudioContext();
 
     notify('音声を読み込みました: ' + file.name);
     updateAudioInfo();
-    updateAudioTimeline();
+    updateAudioTimeline();   // ここでファイル名が反映される
   };
   reader.readAsDataURL(file);
   e.target.value = '';
@@ -3866,7 +3894,7 @@ async function initAudioContext() {
   audioState.duration = audioBuffer.duration;
 
   // フレーム自動拡張
-  const fps = S.fps || 12;
+  const fps = S.fps || 24;
   const requiredFrames = Math.ceil(audioState.duration * fps) + 48;
   const currentTotal = CTF();
   if (requiredFrames > currentTotal) {
@@ -3925,78 +3953,137 @@ function deleteAudio() {
   notify('音声を削除しました');
 }
 
+// 音声読み込み成功時などに呼び出される関数を修正
 function updateAudioInfo() {
-  const info = document.getElementById('audio-info');
+  const filenameDisplay = document.getElementById('audio-filename-display');
+  const durationDisplay  = document.getElementById('audio-duration-display');
+
   if (audioState.file) {
-    const duration = audioState.duration.toFixed(2);
-    info.textContent = `長さ: ${duration}秒`;
+    // ファイル名だけ抜き出す（長いパスやDataURLを除去）
+    let displayName = '音声ファイル';
+
+    // DataURLの場合は「読み込んだ音声」などにするか、
+    // 可能なら元のファイル名を保持しておくのが理想
+    if (audioState.originalFileName) {
+      displayName = audioState.originalFileName;
+    } else if (audioState.file.startsWith('data:audio')) {
+      displayName = '読み込んだ音声';
+    }
+
+    filenameDisplay.textContent = displayName;
+    
+    if (audioState.duration) {
+      durationDisplay.textContent = `(${audioState.duration.toFixed(1)}秒)`;
+    } else {
+      durationDisplay.textContent = '';
+    }
   } else {
-    info.textContent = '音声なし';
+    filenameDisplay.textContent = '音声なし';
+    durationDisplay.textContent = '';
   }
 }
 
 function drawAudioWaveform() {
-  if (!audioBuffer) return;
-
   const canvas = document.getElementById('audio-waveform-canvas');
-  if (!canvas) return;
+  if (!canvas) {
+    console.error("audio-waveform-canvas が見つかりません");
+    return;
+  }
+
+  if (!audioBuffer) {
+    canvas.width = 300;
+    canvas.height = 24;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'var(--text-muted)';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('音声なし', canvas.width / 2, canvas.height / 2 + 3);
+    return;
+  }
+
+  const fps = S.fps || 24;
+  const cellWidth = 28;
+  const sampleRate = audioBuffer.sampleRate;
+  const channelData = audioBuffer.getChannelData(0);
+  const duration = audioBuffer.duration || 1;
+
+  // ── 先頭無音の検出（より厳しく、正確に） ────────────────────────
+  let realStartSec = 0;
+  const silenceThreshold = 0.04;      // ← ここを上げて無音判定を厳しく（0.025 → 0.04）
+  const minSilenceSamples = sampleRate * 0.05;  // 最低50ms連続無音で確定
+  let silentCount = 0;
+
+  for (let i = 0; i < channelData.length; i++) {
+    if (Math.abs(channelData[i]) <= silenceThreshold) {
+      silentCount++;
+      if (silentCount >= minSilenceSamples) {
+        realStartSec = i / sampleRate;
+        break;
+      }
+    } else {
+      silentCount = 0;  // 音が出たらリセット
+    }
+  }
+
+  // 検出できなかった場合は0（安全策）
+  if (realStartSec === 0) {
+    console.log("先頭無音検出できず → オフセット0秒");
+  } else {
+    console.log(`先頭無音検出: ${realStartSec.toFixed(3)}秒 ≈ ${Math.round(realStartSec * fps)}フレーム`);
+  }
+
+  // ── 無音分をスキップして有効部分だけ描画 ────────────────────────
+  const effectiveDuration = duration - realStartSec;
+  const totalPixels = Math.ceil(effectiveDuration * fps * cellWidth);
+
+  canvas.width = Math.max(totalPixels, 300);
+  canvas.height = 24;
 
   const ctx = canvas.getContext('2d');
-  const fps = S.fps || 12;
-  const cellWidth = 28;
-  const audioDuration = audioBuffer.duration || 1;
-  const totalPixels = Math.ceil(audioDuration * fps * cellWidth);
-
-  // キャンバスサイズを音声長さに合わせる
-  canvas.width = totalPixels;
-  canvas.height = 24;
+  if (!ctx) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 薄い背景
+  // 背景
   ctx.fillStyle = 'rgba(78, 205, 196, 0.03)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const sampleRate = audioBuffer.sampleRate;
-  const channelData = audioBuffer.getChannelData(0); // 左チャンネル
+  // ── 描画パラメータ ────────────────────────────────────────────────
+  const threshold = 0.012;
+  const minSilencePixels = 5;
 
-  const threshold = 0.012;          // これ以下なら無音扱い（調整可：0.008〜0.025）
-  const minSilencePixels = 5;       // これ以上無音が続いたら線を切る（ちらつき防止）
-
-  const samplesPerPixel = sampleRate / (fps * cellWidth);
-
-  ctx.strokeStyle = '#4ecdc4';      // 線の色
+  ctx.strokeStyle = '#4ecdc4';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
   let isSpeaking = false;
   let lastDrawX = -1;
 
-  for (let px = 0; px <= totalPixels; px++) {
-    const time = px / (fps * cellWidth);
+  // ── メインループ：無音をスキップして最初から描画 ────────────────
+  for (let px = 0; px < canvas.width; px++) {
+    // 時間計算：無音分を最初から飛ばす
+    const time = px / (fps * cellWidth) + realStartSec;
+
     const startSample = Math.floor(time * sampleRate);
     const endSample = Math.min(
-      Math.floor((time + 1/(fps*cellWidth)) * sampleRate),
+      Math.floor((time + 1 / (fps * cellWidth)) * sampleRate),
       channelData.length
     );
 
-    // そのピクセル区間の最大振幅
     let maxAmp = 0;
     for (let s = startSample; s < endSample && s < channelData.length; s++) {
       maxAmp = Math.max(maxAmp, Math.abs(channelData[s]));
     }
 
     const x = px;
-    const y = canvas.height / 2;  // 常に中央の水平線
+    const y = canvas.height / 2;
 
     if (maxAmp > threshold) {
-      // 喋ってる
       if (!isSpeaking) {
-        // 喋り始めた
         isSpeaking = true;
         lastDrawX = x;
       }
-      // 線を繋げる
       if (lastDrawX >= 0) {
         ctx.beginPath();
         ctx.moveTo(lastDrawX, y);
@@ -4005,17 +4092,13 @@ function drawAudioWaveform() {
       }
       lastDrawX = x;
     } else {
-      // 無音
       if (isSpeaking) {
-        // 喋りが終わった
-        // 最後の線を終端まで引く
         if (lastDrawX >= 0) {
           ctx.beginPath();
           ctx.moveTo(lastDrawX, y);
           ctx.lineTo(x, y);
           ctx.stroke();
         }
-        // 無音が長く続いたら完全にリセット
         if (x - lastDrawX >= minSilencePixels) {
           lastDrawX = -1;
         }
@@ -4024,14 +4107,23 @@ function drawAudioWaveform() {
     }
   }
 
-  // 最後に喋ってる状態が続いていたら終端まで線を引く
   if (isSpeaking && lastDrawX >= 0) {
     ctx.beginPath();
     ctx.moveTo(lastDrawX, y);
-    ctx.lineTo(totalPixels, y);
+    ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+
+  console.log(`波形描画完了: 幅 ${canvas.width}px (有効部分 ${effectiveDuration.toFixed(2)}秒)`);
 }
+function updateAudioOffset(val) {
+  audioState.offsetSec = +val; // 新規プロパティ
+  console.log("音声オフセット変更 →", audioState.offsetSec, "秒");
+  // 必要なら即時再描画・再生位置更新
+  drawAudioWaveform();
+  updateAudioPlayhead();
+}
+
 
 
 </script>
