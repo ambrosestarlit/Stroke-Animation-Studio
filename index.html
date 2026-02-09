@@ -3489,37 +3489,128 @@ function generateInbetweens() {
 
   pushUndo();
 
-  const targetLayer = S.layer;           // ← ここ！選択中のレイヤーのみ対象
+  const targetLayer = S.layer;
   const sS = CF()[targetLayer].frames[sf].strokes;
   const eS = CF()[targetLayer].frames[ef].strokes;
 
-  // 挿入位置は start の直後から cnt 個
   let insertPos = sf + 1;
 
   for (let i = 0; i < cnt; i++) {
     const t = (i + 1) / (cnt + 1);
     const interp = interpStrokes(sS, eS, t, ease);
+    
+    // ★ 自動中割生成後にスムージング処理を適用
+    const smoothed = smoothInterpolatedStrokes(interp);
 
-    // 選択中のレイヤーにだけ中割フレームを挿入
     CF()[targetLayer].frames.splice(insertPos, 0, {
-      strokes: interp,
+      strokes: smoothed,
       draftImg: null
     });
 
-    insertPos++;  // 次の挿入位置をずらす
+    insertPos++;
   }
-
-  // totalFrames は変更しない（他のレイヤーは増えない）
-  // CC().totalFrames += cnt;   ← これをコメントアウトまたは削除
 
   closeModal('inbetween-dialog');
   updateTimeline();
-  goToFrame(sf + 1);           // 最初の生成フレームに移動
+  goToFrame(sf + 1);
   renderAll();
 
   notify(`${cnt}枚の中割をレイヤー${targetLayer + 1}に生成しました`);
 }
 function interpStrokes(sa,sb,t,ease){const et=applyEase(t,ease);const r=[];const mx=Math.max(sa.length,sb.length);for(let i=0;i<mx;i++){const a=i<sa.length?sa[i]:null,b=i<sb.length?sb[i]:null;if(a&&b&&a.type===b.type)r.push(interpOne(a,b,et));else if(a&&!b)r.push(fadeS(a,1-et));else if(!a&&b)r.push(fadeS(b,et));else if(a&&b){et<0.5?r.push(fadeS(a,1-et*2)):r.push(fadeS(b,(et-0.5)*2));}}return r;}
+
+// ★ 新規追加：補間後のストロークをスムージング処理
+function smoothInterpolatedStrokes(strokes) {
+  const result = [];
+  
+  for (const stroke of strokes) {
+    if (stroke.type === 'bezier' && stroke.controls && stroke.controls.length > 2) {
+      // ベジェ曲線の場合のみスムージングを適用
+      const smoothedStroke = {
+        ...stroke,
+        controls: smoothBezierControls(stroke.controls)
+      };
+      result.push(smoothedStroke);
+    } else {
+      // それ以外のストロークはそのまま
+      result.push(stroke);
+    }
+  }
+  
+  return result;
+}
+
+// Catmull-Romスプライン補間を使用してコントロールポイントを滑らかにする
+function smoothBezierControls(controls) {
+  if (controls.length <= 2) return controls;
+  
+  // まず全ポイントを抽出（始点と終点のみ）
+  const points = [];
+  points.push({ x: controls[0].sx, y: controls[0].sy });
+  for (const ctrl of controls) {
+    points.push({ x: ctrl.ex, y: ctrl.ey });
+  }
+  
+  // ポイント数が少ない場合はそのまま返す
+  if (points.length <= 3) return controls;
+  
+  // ポイントを間引いて最適化（距離が近すぎるポイントを削除）
+  const optimized = optimizePoints(points);
+  
+  // 最適化されたポイントから新しいコントロールポイントを生成
+  const newControls = [];
+  
+  for (let i = 0; i < optimized.length - 1; i++) {
+    const p0 = i > 0 ? optimized[i - 1] : optimized[i];
+    const p1 = optimized[i];
+    const p2 = optimized[i + 1];
+    const p3 = i < optimized.length - 2 ? optimized[i + 2] : optimized[i + 1];
+    
+    // Catmull-Romスプラインの制御点を計算
+    const tension = 0.5; // 張力パラメータ（0.5が標準）
+    
+    const cx = p1.x + (p2.x - p0.x) * tension / 6;
+    const cy = p1.y + (p2.y - p0.y) * tension / 6;
+    
+    newControls.push({
+      sx: p1.x,
+      sy: p1.y,
+      cx: cx,
+      cy: cy,
+      ex: p2.x,
+      ey: p2.y
+    });
+  }
+  
+  return newControls.length > 0 ? newControls : controls;
+}
+
+// ポイントを最適化（近すぎるポイントを削除）
+function optimizePoints(points) {
+  if (points.length <= 3) return points;
+  
+  const optimized = [points[0]]; // 最初の点は必ず含める
+  const minDistance = 3; // 最小距離の閾値
+  
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = optimized[optimized.length - 1];
+    const curr = points[i];
+    
+    const dx = curr.x - prev.x;
+    const dy = curr.y - prev.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    // 距離が閾値以上の場合のみ追加
+    if (dist >= minDistance) {
+      optimized.push(curr);
+    }
+  }
+  
+  // 最後の点は必ず含める
+  optimized.push(points[points.length - 1]);
+  
+  return optimized;
+}
 function interpOne(a,b,t){
   if(a.type==='bezier'&&b.type==='bezier')return{type:'bezier',controls:interpBezier(a.controls,b.controls,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
   if(a.type==='line'&&b.type==='line')return{type:'line',x1:lerp(a.x1,b.x1,t),y1:lerp(a.y1,b.y1,t),x2:lerp(a.x2,b.x2,t),y2:lerp(a.y2,b.y2,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
