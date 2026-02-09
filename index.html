@@ -545,7 +545,59 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   z-index: 1;
 }
 
+.layer-color-btn {
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;           /* 👁との間隔 */
+}
 
+.layer-color-btn:hover {
+  background: var(--bg-input);
+  color: var(--accent);
+}
+
+/* レイヤー専用ミニパレット */
+#layer-color-palette {
+  position: absolute;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 8px;
+  display: none;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 160px;
+}
+
+#layer-color-palette .color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid #444;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+#layer-color-palette .color-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(233,69,96,0.4);
+}
+
+#layer-color-palette .color-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(233,69,96,0.3);
+}
 </style>
 </head>
 <body>
@@ -2735,9 +2787,12 @@ function removeCut(){if(cuts.length<=1){notify('最後のカットは削除で�
 // レイヤー
 // ===========================================================
 function updateLayerList(){
-  const list=document.getElementById('layer-list');list.innerHTML='';
+  const list = document.getElementById('layer-list');
+  list.innerHTML = '';
+
   for(let i = 0; i < LAYER_DEFS.length; i++){
     const d = LAYER_DEFS[i];
+
     const item = document.createElement('div');
     item.className = 'layer-item' + (i === S.layer ? ' active' : '');
     item.onclick = () => {
@@ -2745,13 +2800,60 @@ function updateLayerList(){
       updateLayerList();
       renderAll();
     };
-    const dot=document.createElement('div');dot.className='layer-color-dot';dot.style.background=d.color;
-    const nm=document.createElement('div');nm.className='layer-name';nm.textContent=d.name;
-    const vis=document.createElement('button');vis.className='layer-vis-btn'+(layerVis[i]?'':' hidden');vis.textContent=layerVis[i]?'👁':'🚫';vis.title='表示切替';
-    vis.onclick=e=>{e.stopPropagation();layerVis[i]=!layerVis[i];updateLayerList();renderAll();};
-    const onion=document.createElement('button');onion.className='layer-onion-btn'+(onionLayerVis[i]?' active':'');onion.textContent='🧅';onion.title='オニオンスキン';
-    onion.onclick=e=>{e.stopPropagation();onionLayerVis[i]=!onionLayerVis[i];updateLayerList();renderAll();};
-    item.appendChild(dot);item.appendChild(nm);item.appendChild(vis);item.appendChild(onion);list.appendChild(item);}
+
+    // 色ドット
+    const dot = document.createElement('div');
+    dot.className = 'layer-color-dot';
+    dot.style.background = d.color;
+
+    // レイヤー名
+    const nm = document.createElement('div');
+    nm.className = 'layer-name';
+    nm.textContent = d.name;
+
+    // ★ 新規追加：🎨 ボタン（線画色一括変更用）
+    const colorBtn = document.createElement('button');
+    colorBtn.className = 'layer-color-btn';
+    colorBtn.textContent = '🎨';
+    colorBtn.title = 'このレイヤーの線画色を一括変更';
+    colorBtn.onclick = (e) => {
+      e.stopPropagation();               // 親のレイヤー選択クリックをキャンセル
+      showLayerColorPalette(i, e);       // パレット表示関数を呼ぶ
+    };
+
+    // 表示/非表示ボタン（👁）
+    const vis = document.createElement('button');
+    vis.className = 'layer-vis-btn' + (layerVis[i] ? '' : ' hidden');
+    vis.textContent = layerVis[i] ? '👁' : '🚫';
+    vis.title = '表示切替';
+    vis.onclick = (e) => {
+      e.stopPropagation();
+      layerVis[i] = !layerVis[i];
+      updateLayerList();
+      renderAll();
+    };
+
+    // オニオンスキンボタン（🧅）
+    const onion = document.createElement('button');
+    onion.className = 'layer-onion-btn' + (onionLayerVis[i] ? ' active' : '');
+    onion.textContent = '🧅';
+    onion.title = 'オニオンスキン';
+    onion.onclick = (e) => {
+      e.stopPropagation();
+      onionLayerVis[i] = !onionLayerVis[i];
+      updateLayerList();
+      renderAll();
+    };
+
+    // 追加順序：色丸 → 名前 → 🎨 → 👁 → 🧅
+    item.appendChild(dot);
+    item.appendChild(nm);
+    item.appendChild(colorBtn);    // ← これが新しいボタン
+    item.appendChild(vis);
+    item.appendChild(onion);
+
+    list.appendChild(item);
+  }
 }
 function clearCurrentLayer(){pushUndo();CF()[S.layer].frames[S.frame]={strokes:[],draftImg:null};renderAll();notify('クリア');}
 function clearAllLayers(){if(!confirm('現在のフレームの全レイヤーをクリアしますか？'))return;pushUndo();for(let i=0;i<LAYER_DEFS.length;i++)CF()[i].frames[S.frame]={strokes:[],draftImg:null};renderAll();notify('全レイヤークリア');}
@@ -4124,7 +4226,135 @@ function updateAudioOffset(val) {
   updateAudioPlayhead();
 }
 
+// グローバル変数（どのレイヤーのパレットか覚えておく）
+let currentLayerForColorChange = -1;
 
+// ミニパレット表示
+function showLayerColorPalette(layerIndex, event) {
+  event.stopPropagation();
+
+  currentLayerForColorChange = layerIndex;
+
+  const palette = document.getElementById('layer-color-palette');
+  if (!palette) {
+    createLayerColorPalette();
+    // ↑ 初回生成は変わらず
+  }
+
+  // ★ ここを変更：キャンバスエリアの右上固定に
+  const canvasArea = document.getElementById('canvas-area');
+  const rect = canvasArea.getBoundingClientRect();
+
+  // 右上から少し内側に配置（右利きがペンで隠しにくい位置）
+  palette.style.position = 'fixed';          // ← fixed に変更（画面全体基準）
+  palette.style.right  = '20px';             // 右端から20px
+  palette.style.top    = '80px';             // 上から80px（ヘッダー分空ける）
+  palette.style.left   = 'auto';             // 左は自動
+  palette.style.bottom = 'auto';
+
+  // アクティブ色更新 & 表示
+  updateLayerPaletteActive();
+  palette.style.display = 'flex';
+
+  // 外クリックで閉じる
+  setTimeout(() => {
+    document.addEventListener('click', closeLayerPaletteOnOutsideClick, { once: true });
+  }, 0);
+}
+function createLayerColorPalette() {
+  const div = document.createElement('div');
+  div.id = 'layer-color-palette';
+
+  // よく使う色（上部パレットと同じ配列を使っても良い）
+  const colors = [
+    '#000000', '#ffffff', 
+    '#e94560', '#0000ff', '#ffff00', 
+    '#87FF42', '#ff6b81', '#a855f7', 
+    '#4ecdc4', '#f9a825'
+  ];
+
+  colors.forEach(col => {
+    const swatch = document.createElement('button');
+    swatch.className = 'color-swatch';
+    swatch.dataset.color = col;
+    swatch.style.background = col;
+    swatch.title = col;
+
+    swatch.onclick = (e) => {
+      e.stopPropagation();
+      if (currentLayerForColorChange < 0) return;
+
+      changeLayerLineColor(currentLayerForColorChange, col);
+      closeLayerPalette();
+    };
+
+    div.appendChild(swatch);
+  });
+
+  // 右パネル内に追加
+  document.getElementById('right-panel').appendChild(div);
+}
+
+function updateLayerPaletteActive() {
+  const palette = document.getElementById('layer-color-palette');
+  if (!palette) return;
+
+  palette.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('active', 
+      s.dataset.color.toLowerCase() === S.penColor.toLowerCase());
+  });
+}
+
+function closeLayerPaletteOnOutsideClick(e) {
+  const palette = document.getElementById('layer-color-palette');
+  if (palette && !palette.contains(e.target)) {
+    closeLayerPalette();
+  }
+}
+
+function closeLayerPalette() {
+  const palette = document.getElementById('layer-color-palette');
+  if (palette) palette.style.display = 'none';
+  currentLayerForColorChange = -1;
+}
+
+// ★★★ ここが本命：レイヤー全体の線画色一括変更 ★★★
+function changeLayerLineColor(layerIndex, newColor) {
+  if (layerIndex < 0 || layerIndex >= LAYER_DEFS.length) return;
+
+  pushUndo();  // 元に戻せるように
+
+  let changedCount = 0;
+
+  // そのレイヤーの全フレームを走査
+  for (let f = 0; f < CF()[layerIndex].frames.length; f++) {
+    const fr = CF()[layerIndex].frames[f];
+    if (!fr || !fr.strokes || fr.strokes.length === 0) continue;
+
+    let frameChanged = false;
+
+    for (const s of fr.strokes) {
+      // 線画（bezier/line/ellipse/rect）の色だけ変更
+      if (s.type === 'bezier' || s.type === 'line' || 
+          s.type === 'ellipse' || s.type === 'rect') {
+        if (s.color !== newColor) {
+          s.color = newColor;
+          frameChanged = true;
+        }
+      }
+    }
+
+    if (frameChanged) changedCount++;
+  }
+
+  if (changedCount > 0) {
+    renderAll();
+    updateTimeline();
+    notify(`レイヤー${layerIndex + 1} の線画色を ${newColor} に変更しました（${changedCount}フレーム）`);
+  } else {
+    notify('変更対象の線画が見つかりませんでした');
+  }
+}
 
 </script>
 
