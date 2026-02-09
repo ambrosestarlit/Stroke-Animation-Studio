@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -559,13 +560,48 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   justify-content: center;
   margin-right: 2px;           /* 👁との間隔 */
 }
+/* カラーピッカーのポップアップを右側に固定表示するためのラッパー */
+#layer-picker-popup {
+  position: fixed;
+  right: 30px;                /* キャンバス右端から少し内側 */
+  top: 100px;                 /* ヘッダー下くらい */
+  z-index: 400;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  display: none;
+}
+
+#layer-picker-popup.show {
+  display: block;
+}
+
+#layer-picker-popup .picker-header {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+#layer-picker-popup input[type="color"] {
+  width: 180px;
+  height: 180px;
+  padding: 0;
+  border: none;
+  cursor: crosshair;
+}
 
 .layer-color-btn:hover {
   background: var(--bg-input);
   color: var(--accent);
 }
 
+
+
 /* レイヤー専用ミニパレット */
+
 #layer-color-palette {
   position: absolute;
   background: var(--bg-panel);
@@ -599,6 +635,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   box-shadow: 0 0 0 4px rgba(233,69,96,0.3);
 }
 </style>
+
 </head>
 <body>
 <div id="header">
@@ -4227,94 +4264,241 @@ function updateAudioOffset(val) {
 }
 
 // グローバル変数（どのレイヤーのパレットか覚えておく）
+// 現在のレイヤー用ピッカー
 let currentLayerForColorChange = -1;
 
-// ミニパレット表示
-function showLayerColorPalette(layerIndex, event) {
-  event.stopPropagation();
+// ポップアップ全体のラッパー（初回生成）
+function createLayerPickerPopup() {
+  // 既に存在していたら何もしない
+  if (document.getElementById('layer-picker-popup')) return;
 
-  currentLayerForColorChange = layerIndex;
+  // ポップアップ本体を作成
+  const popup = document.createElement('div');
+  popup.id = 'layer-picker-popup';
+  popup.innerHTML = `
+    <div class="picker-header">レイヤー色を変更</div>
 
-  const palette = document.getElementById('layer-color-palette');
-  if (!palette) {
-    createLayerColorPalette();
-    // ↑ 初回生成は変わらず
-  }
+    <!-- ミニカラーボタンエリア -->
+    <div id="mini-color-buttons" style="display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin:12px 0 16px;">
+      <!-- ここにJSでミニボタンが動的に入る -->
+    </div>
 
-  // ★ ここを変更：キャンバスエリアの右上固定に
-  const canvasArea = document.getElementById('canvas-area');
-  const rect = canvasArea.getBoundingClientRect();
+    <!-- iro.js カラーピッカー -->
+    <div style="text-align:center; margin:20px 0;">
+      <div id="iro-picker-container" style="width:220px; height:220px; margin:0 auto;"></div>
+    </div>
+<div style="height: 40px;"></div>
+    <!-- ★ スポイトボタン（ここが新規追加部分） ★ -->
+    <div style="text-align:center; margin:10px 0 20px;">
+      <button id="eyedropper-btn" title="画面全体から色を拾う（スポイト）"
+        style="padding:10px 20px; background:#555; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:15px; font-weight:bold; transition:0.2s;">
+        🎨 スポイトを使う
+      </button>
+    </div>
 
-  // 右上から少し内側に配置（右利きがペンで隠しにくい位置）
-  palette.style.position = 'fixed';          // ← fixed に変更（画面全体基準）
-  palette.style.right  = '20px';             // 右端から20px
-  palette.style.top    = '80px';             // 上から80px（ヘッダー分空ける）
-  palette.style.left   = 'auto';             // 左は自動
-  palette.style.bottom = 'auto';
+    <!-- 適用・閉じるボタン -->
+    <div style="margin-top:16px; text-align:center;">
+      <button id="apply-layer-color" 
+        style="padding:10px 24px; background:var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-right:12px;">
+        適用
+      </button>
+      <button id="close-layer-picker" 
+        style="padding:10px 24px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:8px; cursor:pointer;">
+        閉じる
+      </button>
+    </div>
+  `;
 
-  // アクティブ色更新 & 表示
-  updateLayerPaletteActive();
-  palette.style.display = 'flex';
+  document.body.appendChild(popup);
 
-  // 外クリックで閉じる
-  setTimeout(() => {
-    document.addEventListener('click', closeLayerPaletteOnOutsideClick, { once: true });
-  }, 0);
+  // ── ミニカラーボタンを動的に生成 ───────────────────────────────
+  generateMiniColorButtons();
+
+  // ── iro.js ピッカーの初期化 ────────────────────────────────────
+  const iroPicker = new iro.ColorPicker("#iro-picker-container", {
+    width: 200,
+    color: "#ffffff",           // 初期色（白）
+    borderWidth: 1,
+    borderColor: "#444",
+    layout: [
+      {
+        component: iro.ui.Wheel,
+        options: { wheelLightness: true }
+      },
+      {
+        component: iro.ui.Slider,
+        options: {
+          sliderType: 'value',
+          reverse: true           // 左＝黒、右＝白
+        }
+      },
+      {
+        component: iro.ui.Slider,
+        options: { sliderType: 'saturation' }
+      }
+    ]
+  });
+
+  // ── 適用ボタン ──────────────────────────────────────────────────
+  document.getElementById('apply-layer-color').onclick = () => {
+    if (currentLayerForColorChange < 0) return;
+    const hex = iroPicker.color.hexString;
+    changeLayerLineColor(currentLayerForColorChange, hex);
+    closeLayerPicker();
+    notify(`レイヤー色を ${hex} に変更しました`);
+  };
+
+  // ── 閉じるボタン ────────────────────────────────────────────────
+  document.getElementById('close-layer-picker').onclick = () => {
+    closeLayerPicker();
+  };
+
+  // ── スポイトボタンの処理（ここがメイン！） ──────────────────────
+  document.getElementById('eyedropper-btn').onclick = () => {
+    if (currentLayerForColorChange < 0) {
+      notify('レイヤーが選択されていません');
+      return;
+    }
+
+    // ネイティブ EyeDropper API が使える場合
+    if (window.EyeDropper) {
+      const eyeDropper = new EyeDropper();
+
+      eyeDropper.open()
+        .then(result => {
+          const hex = result.sRGBHex;
+          // 即座に適用
+          changeLayerLineColor(currentLayerForColorChange, hex);
+          // iro.js の色も更新
+          iroPicker.color.set(hex);
+          notify(`画面から色を拾いました → ${hex}`);
+        })
+        .catch(err => {
+          // キャンセル（Escキーなど）は静かに処理
+          if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+            console.warn('EyeDropper エラー:', err);
+            notify('スポイトが失敗しました');
+          } else {
+            notify('スポイトをキャンセルしました');
+          }
+        });
+    }
+    // EyeDropper が使えないブラウザ用のフォールバック
+    else {
+      notify('このブラウザでは画面全体スポイトが使えません。キャンバス内をクリックして色を拾います（Escでキャンセル）');
+
+      const area = document.getElementById('canvas-area');
+      const previousCursor = area.style.cursor;
+      area.style.cursor = 'crosshair';
+
+      const onClick = (e) => {
+        const pos = getPos(e); // 既存の getPos 関数を利用
+        const ctx = layerCtxs[currentLayerForColorChange];
+        const data = ctx.getImageData(Math.floor(pos.x), Math.floor(pos.y), 1, 1).data;
+        const hex = '#' + 
+          data[0].toString(16).padStart(2,'0') +
+          data[1].toString(16).padStart(2,'0') +
+          data[2].toString(16).padStart(2,'0');
+
+        changeLayerLineColor(currentLayerForColorChange, hex);
+        iroPicker.color.set(hex);
+        notify(`キャンバスから ${hex} を拾いました`);
+
+        cleanup();
+      };
+
+      const onEsc = (e) => {
+        if (e.key === 'Escape') {
+          notify('スポイトをキャンセルしました');
+          cleanup();
+        }
+      };
+
+      const cleanup = () => {
+        area.removeEventListener('click', onClick);
+        document.removeEventListener('keydown', onEsc);
+        area.style.cursor = previousCursor;
+      };
+
+      area.addEventListener('click', onClick, { once: true });
+      document.addEventListener('keydown', onEsc);
+    }
+  };
+
+  // ポップアップを表示
+  popup.classList.add('show');
 }
-function createLayerColorPalette() {
-  const div = document.createElement('div');
-  div.id = 'layer-color-palette';
+// ミニカラーボタンを動的に作る関数
+function generateMiniColorButtons() {
+  const container = document.getElementById('mini-color-buttons');
+  if (!container) return;
 
-  // よく使う色（上部パレットと同じ配列を使っても良い）
+  // 以前のミニパレットと同じ色リスト（好みで増減OK）
   const colors = [
-    '#000000', '#ffffff', 
-    '#e94560', '#0000ff', '#ffff00', 
-    '#87FF42', '#ff6b81', '#a855f7', 
+    '#000000', '#ffffff',
+    '#e94560', '#0000ff', '#ffff00',
+    '#87FF42', '#ff6b81', '#a855f7',
     '#4ecdc4', '#f9a825'
   ];
 
   colors.forEach(col => {
-    const swatch = document.createElement('button');
-    swatch.className = 'color-swatch';
-    swatch.dataset.color = col;
-    swatch.style.background = col;
-    swatch.title = col;
+    const btn = document.createElement('button');
+    btn.className = 'color-swatch';
+    btn.style.background = col;
+    btn.style.width = '32px';
+    btn.style.height = '32px';
+    btn.style.border = '2px solid #444';
+    btn.style.borderRadius = '6px';
+    btn.style.cursor = 'pointer';
+    btn.title = col;
 
-    swatch.onclick = (e) => {
-      e.stopPropagation();
-      if (currentLayerForColorChange < 0) return;
-
-      changeLayerLineColor(currentLayerForColorChange, col);
-      closeLayerPalette();
+    // クリックで即適用（ピッカーの値も同期）
+    btn.onclick = () => {
+      if (currentLayerForColorChange >= 0) {
+        changeLayerLineColor(currentLayerForColorChange, col);
+        document.getElementById('layer-color-picker').value = col; // ピッカーも更新
+        closeLayerPicker(); // すぐ閉じる（好みで外してもOK）
+      }
     };
 
-    div.appendChild(swatch);
-  });
-
-  // 右パネル内に追加
-  document.getElementById('right-panel').appendChild(div);
-}
-
-function updateLayerPaletteActive() {
-  const palette = document.getElementById('layer-color-palette');
-  if (!palette) return;
-
-  palette.querySelectorAll('.color-swatch').forEach(s => {
-    s.classList.toggle('active', 
-      s.dataset.color.toLowerCase() === S.penColor.toLowerCase());
+    container.appendChild(btn);
   });
 }
+// ピッカーを表示（🎨ボタン押下時）
+function showLayerColorPalette(layerIndex, event) {
+  event.stopPropagation();
+  currentLayerForColorChange = layerIndex;
 
-function closeLayerPaletteOnOutsideClick(e) {
-  const palette = document.getElementById('layer-color-palette');
-  if (palette && !palette.contains(e.target)) {
-    closeLayerPalette();
+  createLayerPickerPopup();
+
+  const pickerPopup = document.getElementById('layer-picker-popup');
+  const colorInput = document.getElementById('layer-color-picker');
+
+  // 現在のペン色を初期値に
+  colorInput.value = S.penColor;
+
+  // 右側固定表示
+  pickerPopup.style.right = '30px';
+  pickerPopup.style.top  = '100px';
+  pickerPopup.classList.add('show');
+
+  // 外クリックで閉じる
+  setTimeout(() => {
+    document.addEventListener('click', closeLayerPickerOnOutside, { once: true });
+  }, 0);
+}
+
+// 外クリックで閉じる
+function closeLayerPickerOnOutside(e) {
+  const popup = document.getElementById('layer-picker-popup');
+  if (popup && !popup.contains(e.target)) {
+    closeLayerPicker();
   }
 }
 
-function closeLayerPalette() {
-  const palette = document.getElementById('layer-color-palette');
-  if (palette) palette.style.display = 'none';
+function closeLayerPicker() {
+  const popup = document.getElementById('layer-picker-popup');
+  if (popup) popup.classList.remove('show');
   currentLayerForColorChange = -1;
 }
 
@@ -4358,6 +4542,9 @@ function changeLayerLineColor(layerIndex, newColor) {
 
 </script>
 
+<!-- レイヤーごとのカラーピッカー（隠し） -->
+<input type="color" id="layer-color-picker" style="display:none;" value="#000000">
 
+<script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5.5.2/dist/iro.min.js"></script>
 </body>
 </html>
