@@ -739,7 +739,35 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 </div>
   </div>
 </div>
+<!-- レイヤー情報パネル -->
+<div class="panel-section">
+  <div class="panel-header">レイヤー情報</div>
+  <div class="panel-body">
+    <div class="onion-row" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">
+      <label style="width:auto;">作業中のレイヤー:</label>
+      <span id="current-layer-name" style="color:var(--text-primary);font-weight:600;margin-left:4px;">-</span>
+    </div>
+    <div class="onion-row" style="font-size:11px;color:var(--text-secondary);">
+      <label style="width:auto;">ストローク数:</label>
+      <span id="stroke-count" style="color:var(--text-primary);font-weight:600;margin-left:4px;">0</span>
+    </div>
+  </div>
+</div>
 
+<!-- ストローク情報パネル -->
+<div class="panel-section">
+  <div class="panel-header">ストローク情報</div>
+  <div class="panel-body">
+    <div class="onion-row" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">
+      <label style="width:auto;">選択中:</label>
+      <span id="selected-stroke-num" style="color:var(--accent);font-weight:600;margin-left:4px;">-</span>
+    </div>
+    <div class="onion-row" style="font-size:11px;color:var(--text-secondary);">
+      <label style="width:auto;">最新:</label>
+      <span id="latest-stroke-num" style="color:var(--success);font-weight:600;margin-left:4px;">-</span>
+    </div>
+  </div>
+</div>
 <div class="panel-section">
   <div class="panel-header">音声コントロール</div>
   <div class="panel-body">
@@ -2030,6 +2058,46 @@ function renderAll(){
   renderStrokeEditOverlay();
   updateStrokePointSlider();
   updateFrameGuide();
+  // レイヤー・ストローク情報の更新
+updateLayerStrokeInfo();
+}
+// レイヤー・ストローク情報を更新
+function updateLayerStrokeInfo() {
+  const fr = CF()[S.layer].frames[S.frame];
+  const strokeCount = fr ? fr.strokes.filter(s => s.type !== 'eraser').length : 0;
+  
+  // レイヤー情報
+  document.getElementById('current-layer-name').textContent = LAYER_DEFS[S.layer].name;
+  document.getElementById('stroke-count').textContent = strokeCount;
+  
+  // ストローク情報
+  let selectedNum = '-';
+  let latestNum = '-';
+  
+  if (fr && strokeCount > 0) {
+    // 最新のストローク番号（orderが最大のもの）
+    const validStrokes = fr.strokes.filter(s => s.type !== 'eraser');
+    if (validStrokes.length > 0) {
+      const maxOrder = Math.max(...validStrokes.map(s => s.order || 0));
+      latestNum = (maxOrder + 1).toString();
+    }
+    
+    // 選択中のストローク番号
+    if (strokeEditIdx >= 0 && strokeEditIdx < fr.strokes.length) {
+      const selectedStroke = fr.strokes[strokeEditIdx];
+      if (selectedStroke && selectedStroke.type !== 'eraser') {
+        selectedNum = ((selectedStroke.order || 0) + 1).toString();
+      }
+    } else if (selectedStrokeIdx >= 0 && selectedStrokeIdx < fr.strokes.length) {
+      const selectedStroke = fr.strokes[selectedStrokeIdx];
+      if (selectedStroke && selectedStroke.type !== 'eraser') {
+        selectedNum = ((selectedStroke.order || 0) + 1).toString();
+      }
+    }
+  }
+  
+  document.getElementById('selected-stroke-num').textContent = selectedNum;
+  document.getElementById('latest-stroke-num').textContent = latestNum;
 }
 
 function updateFrameGuide(){
