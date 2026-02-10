@@ -844,7 +844,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
           <input type="checkbox" id="snap-enabled-checkbox" checked onchange="toggleSnapEnabled()">
-          <span style="font-size:11px;">端点を吸着（10px以内）</span>
+          <span style="font-size:11px;">端点を吸着（5px以内）</span>
         </label>
       <label id="snap-full-stroke-label" style="display:none; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-top:4px; padding-left:20px; font-size:10px; color:var(--text-muted);">
           <input type="checkbox" id="snap-full-stroke-checkbox" onchange="toggleSnapFullStroke()">
@@ -3633,7 +3633,7 @@ function generateInbetweens() {
       finalStroke = snapNewStrokeToExisting(
         smoothed, 
         existing, 
-        10,
+        5,
         snapFullStroke   // ← これが抜けていると中割時は常に「端点のみ吸着」になる
       );
     }
@@ -3749,7 +3749,7 @@ function optimizePoints(points) {
 }
 
 // ★ 新規追加：ストローク端点の吸着機能
-function snapStrokeEndpoints(strokes, snapDistance = 10) {
+function snapStrokeEndpoints(strokes, snapDistance = 5) {
   if (strokes.length === 0) return strokes;
   
   const result = JSON.parse(JSON.stringify(strokes)); // ディープコピー
