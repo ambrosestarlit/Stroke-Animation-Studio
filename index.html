@@ -676,6 +676,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <label>補正</label><span id="pen-smooth-val">50</span>
       <input type="range" id="pen-smooth" min="0" max="100" value="50">
       <label>色</label><input type="color" id="pen-color" value="#000000">
+      
     </div>
     <div id="stroke-point-settings" style="display:none;">
       <label>ポイント数</label><span id="stroke-point-val">-</span>
@@ -712,6 +713,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   <!-- リサイズハンドル -->
   <div id="resizeHandle"></div>
 </div>
+
 <div class="panel-section" style="border-bottom:none; padding-bottom:0;">
   <div class="panel-header" style="font-size:12px; padding:4px 10px;">
     基本カラー
@@ -838,7 +840,15 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <span style="font-size:11px;">🔍</span>
       <input type="range" id="zoom-slider" min="10" max="500" value="100" title="ズーム" style="width:120px;" oninput="applyZoomSlider(this.value)">
       <span id="zoom-slider-val" style="font-size:10px;color:var(--text-secondary);min-width:28px;">100%</span>
+      
+      
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+          <input type="checkbox" id="snap-enabled-checkbox" checked onchange="toggleSnapEnabled()">
+          <span style="font-size:11px;">端点を吸着（10px以内）</span>
+        </label>
+      
     </div>
+    
   </div>
   <div id="timeline-body" style="display: flex; height: 100%; overflow: hidden;">
 
@@ -899,6 +909,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="modal-row"><label>終了フレーム:</label><input type="number" id="inb-end" value="2" min="1"></div>
     <div class="modal-row"><label>挿入枚数:</label><input type="number" id="inb-count" value="3" min="1" max="30"></div>
     <div class="modal-row"><label>イージング:</label><select id="inb-easing"><option value="linear">リニア</option><option value="easeIn">イーズイン</option><option value="easeOut">イーズアウト</option><option value="easeInOut">イーズインアウト</option></select></div>
+    <div class="checkbox-row" style="margin:12px 0;">
+      <input type="checkbox" id="inb-snap-enabled" checked onchange="syncSnapFromInbetween()">
+      <label for="inb-snap-enabled">ストローク端点を吸着（2px以内）</label>
+    </div>
     <canvas id="inbetween-preview"></canvas>
     <div class="modal-buttons"><button class="modal-btn secondary" onclick="closeModal('inbetween-dialog')">キャンセル</button><button class="modal-btn primary" onclick="generateInbetweens()">生成</button></div>
   </div>
@@ -958,6 +972,7 @@ let draftImgCache={};let strokeGuideVisible=false;
 let draftOpacity=0.4; // 下書きレイヤー不透明度
 let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
 let viewTool=''; // '' | 'pan' | 'rotate' （空=通常描画モード）
+let snapEnabled=true; // ★ ストローク端点吸着の有効/無効フラグ
 
 // ★ ポップアップ画像管理用プロジェクトオブジェクト
 let project={popupImages:[]};
@@ -1426,14 +1441,51 @@ function onUp(e){
   if(S.tool==='move'){onUpMove(p,e);return;}
 
   if(!drawing)return;drawing=false;const fr=CF()[S.layer].frames[S.frame];
-  if(S.tool==='pen'&&curPoints.length>=2){const sm=smoothPoints(curPoints);fr.strokes.push({type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  if(S.tool==='pen'&&curPoints.length>=2){
+    const sm=smoothPoints(curPoints);
+    const newStroke = {type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length};
+    // ★ 吸着が有効な場合、既存ストロークに吸着
+    if(snapEnabled){
+      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10);
+      fr.strokes.push(snapped);
+    } else {
+      fr.strokes.push(newStroke);
+    }
+  }
   else if(S.tool==='eraser'&&curPoints.length>=2){
     // 消しゴム：ストロークのパスを直接削除する方式
     applyEraserToStrokes(fr,curPoints,S.penSize*3);
   }
-  else if(S.tool==='line'&&shapeStart){fr.strokes.push({type:'line',x1:shapeStart.x,y1:shapeStart.y,x2:p.x,y2:p.y,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
-  else if(S.tool==='circle'&&shapeStart){fr.strokes.push({type:'ellipse',cx:(shapeStart.x+p.x)/2,cy:(shapeStart.y+p.y)/2,rx:Math.abs(p.x-shapeStart.x)/2,ry:Math.abs(p.y-shapeStart.y)/2,color:S.penColor,size:S.penSize,order:fr.strokes.length});}
-  else if(S.tool==='rect'&&shapeStart){fr.strokes.push({type:'rect',x:Math.min(shapeStart.x,p.x),y:Math.min(shapeStart.y,p.y),w:Math.abs(p.x-shapeStart.x),h:Math.abs(p.y-shapeStart.y),color:S.penColor,size:S.penSize,order:fr.strokes.length});}
+  else if(S.tool==='line'&&shapeStart){
+    const newStroke = {type:'line',x1:shapeStart.x,y1:shapeStart.y,x2:p.x,y2:p.y,color:S.penColor,size:S.penSize,order:fr.strokes.length};
+    // ★ 吸着が有効な場合、既存ストロークに吸着
+    if(snapEnabled){
+      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10);
+      fr.strokes.push(snapped);
+    } else {
+      fr.strokes.push(newStroke);
+    }
+  }
+  else if(S.tool==='circle'&&shapeStart){
+    const newStroke = {type:'ellipse',cx:(shapeStart.x+p.x)/2,cy:(shapeStart.y+p.y)/2,rx:Math.abs(p.x-shapeStart.x)/2,ry:Math.abs(p.y-shapeStart.y)/2,color:S.penColor,size:S.penSize,order:fr.strokes.length};
+    // ★ 吸着が有効な場合、既存ストロークに吸着
+    if(snapEnabled){
+      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10);
+      fr.strokes.push(snapped);
+    } else {
+      fr.strokes.push(newStroke);
+    }
+  }
+  else if(S.tool==='rect'&&shapeStart){
+    const newStroke = {type:'rect',x:Math.min(shapeStart.x,p.x),y:Math.min(shapeStart.y,p.y),w:Math.abs(p.x-shapeStart.x),h:Math.abs(p.y-shapeStart.y),color:S.penColor,size:S.penSize,order:fr.strokes.length};
+    // ★ 吸着が有効な場合、既存ストロークに吸着
+    if(snapEnabled){
+      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10);
+      fr.strokes.push(snapped);
+    } else {
+      fr.strokes.push(newStroke);
+    }
+  }
   curPoints=[];shapeStart=null;drawingSnapshot=null;renderAll();updateTimeline();
 }
 function onWheel(e){e.preventDefault();const a=document.getElementById('canvas-area').getBoundingClientRect();const mx=e.clientX-a.left,my=e.clientY-a.top;const old=S.zoom;S.zoom=Math.max(0.1,Math.min(10,S.zoom*(e.deltaY>0?0.9:1.1)));S.panX=mx-(mx-S.panX)*(S.zoom/old);S.panY=my-(my-S.panY)*(S.zoom/old);updateTransform();}
@@ -1467,6 +1519,23 @@ function onKeyDown(e){
   if(e.key==='Escape'&&tlSelected.size>0){tlSelected.clear();updateTimeline();}
 }
 function onKeyUp(e){if(e.code==='Space')spaceHeld=false;if(!e.ctrlKey&&!e.metaKey)ctrlHeld=false;}
+
+// ★ ストローク吸着の有効/無効を切り替え
+function toggleSnapEnabled(){
+  snapEnabled = document.getElementById('snap-enabled-checkbox').checked;
+  // 自動中割ダイアログのチェックボックスも同期
+  const inbSnap = document.getElementById('inb-snap-enabled');
+  if(inbSnap) inbSnap.checked = snapEnabled;
+}
+
+// ★ 自動中割ダイアログからの逆同期
+function syncSnapFromInbetween(){
+  snapEnabled = document.getElementById('inb-snap-enabled').checked;
+  // ツールパネルのチェックボックスも同期
+  const snapCheckbox = document.getElementById('snap-enabled-checkbox');
+  if(snapCheckbox) snapCheckbox.checked = snapEnabled;
+}
+
 function selectTool(t){
   console.log('selectTool called with:', t); // デバッグ用
   if(!t) {
@@ -3481,6 +3550,7 @@ function generateInbetweens() {
   const ef = +document.getElementById('inb-end').value - 1;
   const cnt = +document.getElementById('inb-count').value;
   const ease = document.getElementById('inb-easing').value;
+  const snapEnabled = document.getElementById('inb-snap-enabled').checked;
 
   if (sf < 0 || ef >= CTF() || sf >= ef || cnt < 1) {
     notify('フレーム範囲または枚数が不正です');
@@ -3501,9 +3571,12 @@ function generateInbetweens() {
     
     // ★ 自動中割生成後にスムージング処理を適用
     const smoothed = smoothInterpolatedStrokes(interp);
+    
+    // ★ 吸着機能が有効な場合は端点を吸着
+    const snapped = snapEnabled ? snapStrokeEndpoints(smoothed, 2) : smoothed;
 
     CF()[targetLayer].frames.splice(insertPos, 0, {
-      strokes: smoothed,
+      strokes: snapped,
       draftImg: null
     });
 
@@ -3610,6 +3683,177 @@ function optimizePoints(points) {
   optimized.push(points[points.length - 1]);
   
   return optimized;
+}
+
+// ★ 新規追加：ストローク端点の吸着機能
+function snapStrokeEndpoints(strokes, snapDistance = 2) {
+  if (strokes.length === 0) return strokes;
+  
+  const result = JSON.parse(JSON.stringify(strokes)); // ディープコピー
+  
+  // 全ストロークの端点を収集
+  const endpoints = [];
+  for (let i = 0; i < result.length; i++) {
+    const stroke = result[i];
+    if (stroke.type === 'bezier' && stroke.controls && stroke.controls.length > 0) {
+      const first = stroke.controls[0];
+      const last = stroke.controls[stroke.controls.length - 1];
+      endpoints.push({
+        strokeIdx: i,
+        isStart: true,
+        x: first.sx,
+        y: first.sy
+      });
+      endpoints.push({
+        strokeIdx: i,
+        isStart: false,
+        x: last.ex,
+        y: last.ey
+      });
+    } else if (stroke.type === 'line') {
+      endpoints.push({
+        strokeIdx: i,
+        isStart: true,
+        x: stroke.x1,
+        y: stroke.y1
+      });
+      endpoints.push({
+        strokeIdx: i,
+        isStart: false,
+        x: stroke.x2,
+        y: stroke.y2
+      });
+    }
+  }
+  
+  // 各端点について、近くの端点を探して吸着
+  for (let i = 0; i < endpoints.length; i++) {
+    const ep1 = endpoints[i];
+    
+    for (let j = i + 1; j < endpoints.length; j++) {
+      const ep2 = endpoints[j];
+      
+      // 同じストロークの両端点は吸着しない
+      if (ep1.strokeIdx === ep2.strokeIdx) continue;
+      
+      const dx = ep2.x - ep1.x;
+      const dy = ep2.y - ep1.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      // 距離が閾値以内なら吸着
+      if (dist > 0 && dist <= snapDistance) {
+        // 中間点に吸着
+        const snapX = (ep1.x + ep2.x) / 2;
+        const snapY = (ep1.y + ep2.y) / 2;
+        
+        // ep1を更新
+        updateEndpoint(result[ep1.strokeIdx], ep1.isStart, snapX, snapY);
+        endpoints[i].x = snapX;
+        endpoints[i].y = snapY;
+        
+        // ep2を更新
+        updateEndpoint(result[ep2.strokeIdx], ep2.isStart, snapX, snapY);
+        endpoints[j].x = snapX;
+        endpoints[j].y = snapY;
+      }
+    }
+  }
+  
+  return result;
+}
+
+// ストロークの端点を更新
+function updateEndpoint(stroke, isStart, x, y) {
+  if (stroke.type === 'bezier' && stroke.controls && stroke.controls.length > 0) {
+    if (isStart) {
+      stroke.controls[0].sx = x;
+      stroke.controls[0].sy = y;
+    } else {
+      const last = stroke.controls[stroke.controls.length - 1];
+      last.ex = x;
+      last.ey = y;
+    }
+  } else if (stroke.type === 'line') {
+    if (isStart) {
+      stroke.x1 = x;
+      stroke.y1 = y;
+    } else {
+      stroke.x2 = x;
+      stroke.y2 = y;
+    }
+  }
+}
+
+// ★ 新規追加：新しいストロークを既存ストロークに吸着
+function snapNewStrokeToExisting(newStroke, existingStrokes, snapDistance = 2) {
+  const result = JSON.parse(JSON.stringify(newStroke)); // ディープコピー
+  
+  // 新しいストロークの始点と終点を取得
+  let startPoint = null;
+  let endPoint = null;
+  
+  if (result.type === 'bezier' && result.controls && result.controls.length > 0) {
+    const first = result.controls[0];
+    const last = result.controls[result.controls.length - 1];
+    startPoint = { x: first.sx, y: first.sy };
+    endPoint = { x: last.ex, y: last.ey };
+  } else if (result.type === 'line') {
+    startPoint = { x: result.x1, y: result.y1 };
+    endPoint = { x: result.x2, y: result.y2 };
+  }
+  
+  if (!startPoint || !endPoint) return result;
+  
+  // 既存ストロークの端点を収集
+  const existingEndpoints = [];
+  for (let i = 0; i < existingStrokes.length; i++) {
+    const stroke = existingStrokes[i];
+    if (stroke.type === 'bezier' && stroke.controls && stroke.controls.length > 0) {
+      const first = stroke.controls[0];
+      const last = stroke.controls[stroke.controls.length - 1];
+      existingEndpoints.push({ x: first.sx, y: first.sy });
+      existingEndpoints.push({ x: last.ex, y: last.ey });
+    } else if (stroke.type === 'line') {
+      existingEndpoints.push({ x: stroke.x1, y: stroke.y1 });
+      existingEndpoints.push({ x: stroke.x2, y: stroke.y2 });
+    }
+  }
+  
+  // 始点を吸着
+  let minDistStart = Infinity;
+  let snapStartTo = null;
+  for (const ep of existingEndpoints) {
+    const dx = ep.x - startPoint.x;
+    const dy = ep.y - startPoint.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0 && dist <= snapDistance && dist < minDistStart) {
+      minDistStart = dist;
+      snapStartTo = ep;
+    }
+  }
+  
+  // 終点を吸着
+  let minDistEnd = Infinity;
+  let snapEndTo = null;
+  for (const ep of existingEndpoints) {
+    const dx = ep.x - endPoint.x;
+    const dy = ep.y - endPoint.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0 && dist <= snapDistance && dist < minDistEnd) {
+      minDistEnd = dist;
+      snapEndTo = ep;
+    }
+  }
+  
+  // 吸着を適用
+  if (snapStartTo) {
+    updateEndpoint(result, true, snapStartTo.x, snapStartTo.y);
+  }
+  if (snapEndTo) {
+    updateEndpoint(result, false, snapEndTo.x, snapEndTo.y);
+  }
+  
+  return result;
 }
 function interpOne(a,b,t){
   if(a.type==='bezier'&&b.type==='bezier')return{type:'bezier',controls:interpBezier(a.controls,b.controls,t),color:lerpCol(a.color,b.color,t),size:lerp(a.size,b.size,t),order:a.order};
