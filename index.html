@@ -831,6 +831,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <button class="header-btn" onclick="toggleOnionSkin()" title="オニオンスキン">🧅 オニオンスキン</button>
     <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
     <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
+    
     <div class="header-sep"></div>
     <div id="view-tools">
       <button class="header-btn view-tool-btn" id="vt-pan" onclick="setViewTool('pan')">✋画面移動</button>
@@ -840,16 +841,26 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <span style="font-size:11px;">🔍</span>
       <input type="range" id="zoom-slider" min="10" max="500" value="100" title="ズーム" style="width:120px;" oninput="applyZoomSlider(this.value)">
       <span id="zoom-slider-val" style="font-size:10px;color:var(--text-secondary);min-width:28px;">100%</span>
-      
-      
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
-          <input type="checkbox" id="snap-enabled-checkbox" checked onchange="toggleSnapEnabled()">
-          <span style="font-size:11px;">端点を吸着（5px以内）</span>
-        </label>
-      <label id="snap-full-stroke-label" style="display:none; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-top:4px; padding-left:20px; font-size:10px; color:var(--text-muted);">
-          <input type="checkbox" id="snap-full-stroke-checkbox" onchange="toggleSnapFullStroke()">
-          <span>ストローク全体にも吸着</span>
-        </label>
+      <div style="margin:0 8px; display:flex; align-items:center; gap:12px; flex-wrap:nowrap; white-space:nowrap;">
+    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; min-width:max-content;">
+      <input type="checkbox" id="snap-enabled-checkbox" checked onchange="toggleSnapEnabled()">
+      <span style="font-size:11px;">端点を吸着</span>
+    </label>
+
+    <!-- スライダー本体（チェックボックスの右隣） -->
+    <div id="snap-distance-wrapper" style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-secondary);">
+      <span>(</span>
+      <input type="range" id="snap-distance-slider" min="2" max="10" value="3" step="1" style="width:100px; flex:1;">
+      <span id="snap-distance-val" style="min-width:30px; text-align:right;">3</span>
+      <span>px以内)</span>
+    </div>
+  </div>
+
+  <!-- 全体吸着は下に -->
+  <label id="snap-full-stroke-label" style="display:none; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-left:20px; font-size:10px; color:var(--text-muted);">
+    <input type="checkbox" id="snap-full-stroke-checkbox" onchange="toggleSnapFullStroke()">
+    <span>ストローク全体にも吸着</span>
+  </label>
     </div>
     
   </div>
@@ -912,10 +923,8 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="modal-row"><label>終了フレーム:</label><input type="number" id="inb-end" value="2" min="1"></div>
     <div class="modal-row"><label>挿入枚数:</label><input type="number" id="inb-count" value="3" min="1" max="30"></div>
     <div class="modal-row"><label>イージング:</label><select id="inb-easing"><option value="linear">リニア</option><option value="easeIn">イーズイン</option><option value="easeOut">イーズアウト</option><option value="easeInOut">イーズインアウト</option></select></div>
-    <div class="checkbox-row" style="margin:12px 0;">
-      <input type="checkbox" id="inb-snap-enabled" checked onchange="syncSnapFromInbetween()">
-      <label for="inb-snap-enabled">ストローク端点を吸着（2px以内）</label>
-    </div>
+    
+    
     <canvas id="inbetween-preview"></canvas>
     <div class="modal-buttons"><button class="modal-btn secondary" onclick="closeModal('inbetween-dialog')">キャンセル</button><button class="modal-btn primary" onclick="generateInbetweens()">生成</button></div>
   </div>
@@ -977,6 +986,7 @@ let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
 let viewTool=''; // '' | 'pan' | 'rotate' （空=通常描画モード）
 let snapEnabled=true; // ★ ストローク端点吸着の有効/無効フラグ
 let snapFullStroke = false;  // ストローク全体吸着のON/OFF
+let snapDistance = 3;  // 初期値 3px
 
 // ★ ポップアップ画像管理用プロジェクトオブジェクト
 let project={popupImages:[]};
@@ -1135,9 +1145,87 @@ function init(){
   cuts.push(createEmptyCut('C_001',24));
   for(let i=0;i<LAYER_DEFS.length;i++){layerVis[i]=true;onionLayerVis[i]=true;}
   createCanvases();updateCutList();updateLayerList();updateTimeline();updateTransform();
+  function initSnapDistanceUI() {
+    console.log("[DEBUG] initSnapDistanceUI が呼ばれました");
+
+    const slider = document.getElementById('snap-distance-slider');
+    const val    = document.getElementById('snap-distance-val');
+    const wrapper = document.getElementById('snap-distance-wrapper');
+
+    if (!slider || !val || !wrapper) {
+      console.error("[ERROR] スライダー関連の要素が見つかりません");
+      console.log("slider:", slider);
+      console.log("val:", val);
+      console.log("wrapper:", wrapper);
+      return;
+    }
+
+    console.log("[DEBUG] スライダー要素発見");
+
+    // 初期値反映
+    slider.value = snapDistance;
+    val.textContent = snapDistance;
+
+    // スライダー変更
+    slider.addEventListener('input', (e) => {
+      snapDistance = +e.target.value;
+      val.textContent = snapDistance;
+      console.log("snapDistance が変更されました →", snapDistance);
+    });
+
+    // チェックボックス連動
+    const cb = document.getElementById('snap-enabled-checkbox');
+    if (cb) {
+      const updateVisibility = () => {
+        snapEnabled = cb.checked;
+        if (wrapper) {
+          wrapper.style.opacity = snapEnabled ? '1' : '0.4';
+          wrapper.style.pointerEvents = snapEnabled ? 'auto' : 'none';
+        }
+        // 全体吸着ラベルも連動
+        const fullLabel = document.getElementById('snap-full-stroke-label');
+        if (fullLabel) {
+          fullLabel.style.display = snapEnabled ? 'flex' : 'none';
+        }
+        console.log("[DEBUG] snapEnabled 変更 →", snapEnabled);
+      };
+
+      cb.addEventListener('change', updateVisibility);
+      updateVisibility(); // 初回反映（超重要！）
+    } else {
+      console.warn("[WARN] snap-enabled-checkbox が見つかりません");
+    }
+  }
+
+  // ★ 必ずここで呼ぶ
+  initSnapDistanceUI();
+
   renderAll();setupEvents();centerCanvas();
   // ★ 追加: 吸着チェックボックスの初回表示同期
 toggleSnapEnabled();
+initSnapDistanceSlider();      // ← 追加！
+
+
+}
+
+function initSnapDistanceSlider() {
+  const slider = document.getElementById('snap-distance-slider');
+  const valDisplay = document.getElementById('snap-distance-val');
+
+  if (!slider || !valDisplay) return;
+
+  // 初期値反映
+  slider.value = snapDistance;
+  valDisplay.textContent = snapDistance + ' px';
+
+  // スライダー変更時
+  slider.addEventListener('input', (e) => {
+    snapDistance = +e.target.value;
+    valDisplay.textContent = snapDistance + ' px';
+    
+    // 必要なら即時通知（好みで）
+    // notify(`吸着距離を ${snapDistance}px に変更`);
+  });
 }
 function createEmptyCut(name,frames){
   const c={name,totalFrames:frames,frameDur:{},layers:[]};
@@ -1452,9 +1540,9 @@ function onUp(e){
     const newStroke = {type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length};
     // ★ 吸着が有効な場合、既存ストロークに吸着
     if(snapEnabled){
-      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10, snapFullStroke);
-      fr.strokes.push(snapped);
-    } else {
+  const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, snapDistance, snapFullStroke);
+  fr.strokes.push(snapped);
+} else {
       fr.strokes.push(newStroke);
     }
   }
@@ -3601,7 +3689,6 @@ function generateInbetweens() {
   const ef = +document.getElementById('inb-end').value - 1;
   const cnt = +document.getElementById('inb-count').value;
   const ease = document.getElementById('inb-easing').value;
-  const snapEnabled = document.getElementById('inb-snap-enabled').checked;
 
   if (sf < 0 || ef >= CTF() || sf >= ef || cnt < 1) {
     notify('フレーム範囲または枚数が不正です');
@@ -3620,23 +3707,36 @@ function generateInbetweens() {
     const t = (i + 1) / (cnt + 1);
     const interp = interpStrokes(sS, eS, t, ease);
     
-                // ★ 自動中割生成後にスムージング処理を適用
+    // 補間後スムージング
     const smoothed = smoothInterpolatedStrokes(interp);
-   
-    // ★ 吸着機能が有効な場合は適用（全体吸着フラグも反映）
-    let finalStroke = smoothed;
-    if (snapEnabled) {
-      // 中割生成時は、開始/終了フレームのストロークを「既存」として扱う
-      const existing = CF()[targetLayer].frames[sf].strokes.concat(
-        CF()[targetLayer].frames[ef].strokes
-      );
-      finalStroke = snapNewStrokeToExisting(
-        smoothed, 
-        existing, 
-        5,
-        snapFullStroke   // ← これが抜けていると中割時は常に「端点のみ吸着」になる
-      );
-    }
+
+    // ★ ここを変更：常に吸着適用（チェックボックス無視）
+    // 距離はメインのスライダー値（snapDistance）を使う
+    const existing = CF()[targetLayer].frames[sf].strokes.concat(
+      CF()[targetLayer].frames[ef].strokes
+    );
+
+    const finalStroke = snapNewStrokeToExisting(
+      smoothed,
+      existing,
+      snapDistance,         // ← メインの値を使う
+      snapFullStroke        // 全体吸着もメインの設定に従う
+    );
+
+    CF()[targetLayer].frames.splice(insertPos, 0, {
+      strokes: finalStroke,
+      draftImg: null
+    });
+    insertPos++;
+  }
+
+  closeModal('inbetween-dialog');
+  updateTimeline();
+  goToFrame(sf + 1);
+  renderAll();
+  notify(`${cnt}枚の中割をレイヤー${targetLayer + 1}に生成しました（常に吸着適用）`);
+
+    
    
     CF()[targetLayer].frames.splice(insertPos, 0, {
       strokes: finalStroke,
@@ -3644,7 +3744,7 @@ function generateInbetweens() {
     });
 
     insertPos++;
-  }
+  
 
   closeModal('inbetween-dialog');
   updateTimeline();
@@ -3749,7 +3849,7 @@ function optimizePoints(points) {
 }
 
 // ★ 新規追加：ストローク端点の吸着機能
-function snapStrokeEndpoints(strokes, snapDistance = 5) {
+function snapStrokeEndpoints(strokes, snapDistance = 3) {
   if (strokes.length === 0) return strokes;
   
   const result = JSON.parse(JSON.stringify(strokes)); // ディープコピー
@@ -3848,7 +3948,7 @@ function updateEndpoint(stroke, isStart, x, y) {
 }
 
 // ★ 新規追加：新しいストロークを既存ストロークに吸着
-function snapNewStrokeToExisting(newStroke, existingStrokes, snapDistance = 5) {
+function snapNewStrokeToExisting(newStroke, existingStrokes, snapDistance = 3) {
   //デバッグ
   console.log("[snapNewStrokeToExisting] 呼び出し元:", new Error().stack.split("\n")[2]);
 console.log("[snapNewStrokeToExisting] snapFullStroke =", snapFullStroke);
