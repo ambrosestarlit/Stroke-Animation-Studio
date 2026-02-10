@@ -796,7 +796,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="panel-section">
       <div class="panel-header">操作ヘルプ</div>
       <div class="panel-body" style="font-size:10px;color:var(--text-muted);line-height:1.6;">
-        Ctrl+Space+ドラッグ: 回転<br>ホイール: 拡大縮小<br>Space+ドラッグ: パン<br>
+        Ctrl+Space+ドラッグ/テンキーの+-: 回転<br>ホイール: 拡大縮小<br>Space+ドラッグ: パン<br>
         Ctrl+Z/Y: 元に戻す/やり直し<br>Ctrl+S: 保存<br>→/←: フレーム移動<br>
         右クリック: コピー/ペースト/持続設定<br>Esc: 回転リセット/選択解除<br>
         A: ポイント編集（通過点の移動）<br>S: ストローク編集（選択して移動/拡縮/回転）<br>V: 全体移動<br>
@@ -1520,6 +1520,30 @@ function onKeyDown(e){
   }
   // Escで選択解除
   if(e.key==='Escape'&&tlSelected.size>0){tlSelected.clear();updateTimeline();}
+  // テンキーでのキャンバス回転（- で左回転、+ で右回転）
+if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
+  e.preventDefault();
+  S.rot -= 15;  // 左に15度回転（お好みで調整可）
+  updateTransform();
+  document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
+  document.getElementById('rotation-indicator').style.display = 'block';
+  // 少し後に非表示にする（ドラッグ時と同じ挙動）
+  clearTimeout(window._rotHideTimer);
+  window._rotHideTimer = setTimeout(() => {
+    document.getElementById('rotation-indicator').style.display = 'none';
+  }, 1200);
+}
+else if (e.code === 'NumpadAdd' || e.code === 'Equal') {
+  e.preventDefault();
+  S.rot += 15;  // 右に15度回転
+  updateTransform();
+  document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
+  document.getElementById('rotation-indicator').style.display = 'block';
+  clearTimeout(window._rotHideTimer);
+  window._rotHideTimer = setTimeout(() => {
+    document.getElementById('rotation-indicator').style.display = 'none';
+  }, 1200);
+}
 }
 function onKeyUp(e){if(e.code==='Space')spaceHeld=false;if(!e.ctrlKey&&!e.metaKey)ctrlHeld=false;}
 
