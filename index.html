@@ -766,6 +766,20 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <label style="width:auto;">最新:</label>
       <span id="latest-stroke-num" style="color:var(--success);font-weight:600;margin-left:4px;">-</span>
     </div>
+    <div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+        <label style="font-size:10px;color:var(--text-muted);white-space:nowrap;">書き順絞込:</label>
+        <input type="number" id="stroke-order-filter" min="1" 
+          style="flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:3px 6px;font-size:11px;border-radius:3px;width:50px;"
+          placeholder="番号">
+        <button id="clear-stroke-filter" 
+          style="background:var(--bg-input);border:1px solid var(--border);color:var(--text-secondary);padding:3px 8px;font-size:10px;border-radius:3px;cursor:pointer;"
+          title="クリア">×</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-muted);line-height:1.3;">
+        番号を入力してその書き順だけをハイライト表示
+      </div>
+    </div>
   </div>
 </div>
 <div class="panel-section">
@@ -1012,6 +1026,7 @@ let draftImgCache={};let strokeGuideVisible=false;
 let draftOpacity=0.4; // 下書きレイヤー不透明度
 let frameGuideW=1920,frameGuideH=1080; // 枠ガイドサイズ
 let viewTool=''; // '' | 'pan' | 'rotate' （空=通常描画モード）
+let strokeOrderFilter = null; // 書き順フィルター（nullまたは数値）
 let snapEnabled=true; // ★ ストローク端点吸着の有効/無効フラグ
 let snapFullStroke = false;  // ストローク全体吸着のON/OFF
 let snapDistance = 3;  // 初期値 3px
@@ -1232,7 +1247,36 @@ function init(){
   // ★ 追加: 吸着チェックボックスの初回表示同期
 toggleSnapEnabled();
 initSnapDistanceSlider();      // ← 追加！
+// 書き順フィルターのイベント設定
+const filterInput = document.getElementById('stroke-order-filter');
+const clearBtn = document.getElementById('clear-stroke-filter');
 
+if (filterInput) {
+  filterInput.addEventListener('input', (e) => {
+    const val = e.target.value.trim();
+    if (val === '' || val === '0') {
+      strokeOrderFilter = null;
+    } else {
+      strokeOrderFilter = parseInt(val, 10);
+    }
+    renderAll();
+  });
+  
+  // Enterキーでもフォーカス外してプレビュー
+  filterInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur();
+    }
+  });
+}
+
+if (clearBtn) {
+  clearBtn.addEventListener('click', () => {
+    strokeOrderFilter = null;
+    if (filterInput) filterInput.value = '';
+    renderAll();
+  });
+}
 
 }
 
@@ -2917,35 +2961,39 @@ function toggleOnionSkin(){const cb=document.getElementById('onion-enabled');cb.
 
 function renderStrokeGuide() {
   guideCtx.clearRect(0, 0, S.cw, S.ch);
-
+  
   // チェックが入っていない or 非表示なら何もしない
   if (!document.getElementById('stroke-guide-enabled').checked) {
     guideCanvas.style.display = 'none';
     return;
   }
-
+  
   guideCanvas.style.display = 'block';
-
+  
   const prevFi = S.frame - 1;
   if (prevFi < 0) return;
-
-  // ★ ここを変更：全レイヤーではなく、現在選択中のレイヤーのみ処理
+  
   const li = S.layer;
-
-  // そのレイヤーが非表示設定ならガイドも出さない
   if (!layerVis[li]) return;
-
+  
   const fr = getEffectiveFrame(li, prevFi);
   if (!fr) return;
-
+  
   // 消しゴムは除外し、描画順（order）でソート
   const strokes = [...fr.strokes]
     .filter(s => s.type !== 'eraser')
     .sort((a, b) => a.order - b.order);
-
-  // 各ストロークに番号を振ってガイド描画
+  
+  // ★ フィルターが有効な場合は該当する番号のみ描画 ★
   for (let idx = 0; idx < strokes.length; idx++) {
-    drawStrokeGuideAnnotation(guideCtx, strokes[idx], idx + 1);
+    const strokeNum = idx + 1;
+    
+    // フィルターが設定されていて、かつ一致しない場合はスキップ
+    if (strokeOrderFilter !== null && strokeOrderFilter !== strokeNum) {
+      continue;
+    }
+    
+    drawStrokeGuideAnnotation(guideCtx, strokes[idx], strokeNum);
   }
 }
 function drawStrokeGuideAnnotation(ctx, s, num) {
