@@ -1523,7 +1523,7 @@ function onKeyDown(e){
   // テンキーでのキャンバス回転（- で左回転、+ で右回転）
 if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
   e.preventDefault();
-  S.rot -= 15;  // 左に15度回転（お好みで調整可）
+  S.rot -= 3;  // 左に5度回転（お好みで調整可）
   updateTransform();
   document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
   document.getElementById('rotation-indicator').style.display = 'block';
@@ -1535,7 +1535,7 @@ if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
 }
 else if (e.code === 'NumpadAdd' || e.code === 'Equal') {
   e.preventDefault();
-  S.rot += 15;  // 右に15度回転
+  S.rot += 3;  // 右に5度回転
   updateTransform();
   document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
   document.getElementById('rotation-indicator').style.display = 'block';
