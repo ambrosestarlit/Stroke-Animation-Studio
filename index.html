@@ -2108,40 +2108,50 @@ updateLayerStrokeInfo();
 // レイヤー・ストローク情報を更新
 function updateLayerStrokeInfo() {
   const fr = CF()[S.layer].frames[S.frame];
-  const strokeCount = fr ? fr.strokes.filter(s => s.type !== 'eraser').length : 0;
-  
-  // レイヤー情報
-  document.getElementById('current-layer-name').textContent = LAYER_DEFS[S.layer].name;
+
+  // 現在選択中のフレームのストローク数（eraser除く）
+  const strokeCount = fr && fr.strokes
+    ? fr.strokes.filter(s => s.type !== 'eraser').length
+    : 0;
+
+  // レイヤー名
+  document.getElementById('current-layer-name').textContent = 
+    LAYER_DEFS[S.layer].name;
+
+  // ストローク数（選択中フレームの数）
   document.getElementById('stroke-count').textContent = strokeCount;
-  
+
   // ストローク情報
   let selectedNum = '-';
-  let latestNum = '-';
-  
+  let latestNum   = '-';
+
   if (fr && strokeCount > 0) {
-    // 最新のストローク番号（orderが最大のもの）
     const validStrokes = fr.strokes.filter(s => s.type !== 'eraser');
+
+    // 最新の書き順番号（order最大 +1）
     if (validStrokes.length > 0) {
       const maxOrder = Math.max(...validStrokes.map(s => s.order || 0));
       latestNum = (maxOrder + 1).toString();
     }
-    
-    // 選択中のストローク番号
-    if (strokeEditIdx >= 0 && strokeEditIdx < fr.strokes.length) {
-      const selectedStroke = fr.strokes[strokeEditIdx];
-      if (selectedStroke && selectedStroke.type !== 'eraser') {
-        selectedNum = ((selectedStroke.order || 0) + 1).toString();
-      }
-    } else if (selectedStrokeIdx >= 0 && selectedStrokeIdx < fr.strokes.length) {
-      const selectedStroke = fr.strokes[selectedStrokeIdx];
-      if (selectedStroke && selectedStroke.type !== 'eraser') {
-        selectedNum = ((selectedStroke.order || 0) + 1).toString();
+
+    // 選択中の書き順番号
+    let selIdx = -1;
+    if (S.tool === 'stroke' && strokeEditIdx >= 0) {
+      selIdx = strokeEditIdx;
+    } else if (S.tool === 'point' && selectedStrokeIdx >= 0) {
+      selIdx = selectedStrokeIdx;
+    }
+
+    if (selIdx >= 0 && selIdx < fr.strokes.length) {
+      const s = fr.strokes[selIdx];
+      if (s && s.type !== 'eraser') {
+        selectedNum = ((s.order || 0) + 1).toString();
       }
     }
   }
-  
+
   document.getElementById('selected-stroke-num').textContent = selectedNum;
-  document.getElementById('latest-stroke-num').textContent = latestNum;
+  document.getElementById('latest-stroke-num').textContent   = latestNum;
 }
 
 function updateFrameGuide(){
