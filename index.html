@@ -1662,10 +1662,40 @@ function onKeyDown(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxPasteFrame();}
   if(!e.ctrlKey&&!e.metaKey){if(e.key==='p')selectTool('pen');if(e.key==='l')selectTool('line');if(e.key==='c')selectTool('circle');if(e.key==='r')selectTool('rect');if(e.key==='e')selectTool('eraser');if(e.key==='a')selectTool('point');if(e.key==='s')selectTool('stroke');if(e.key==='v')selectTool('move');}
   
-  // 書き順フィルターの矢印キー操作（書き順ガイド表示時のみ）★先に処理
+  // onKeyDown 関数の中
+if (e.code === 'Numpad2') {
+  e.preventDefault();
+  const sizeInput = document.getElementById('pen-size');   // ← brush-size → pen-size に修正
+  if (sizeInput) {
+    let current = parseInt(sizeInput.value, 10) || S.penSize;
+    if (current > 1) {
+      current--;
+      sizeInput.value = current;
+      S.penSize = current;
+      document.getElementById('pen-size-val').textContent = current; // 表示も更新
+      notify(`ブラシサイズ: ${current}px`);
+    }
+  }
+}
+
+if (e.code === 'Numpad8') {
+  e.preventDefault();
+  const sizeInput = document.getElementById('pen-size');   // ← ここも修正
+  if (sizeInput) {
+    let current = parseInt(sizeInput.value, 10) || S.penSize;
+    if (current < 50) {
+      current++;
+      sizeInput.value = current;
+      S.penSize = current;
+      document.getElementById('pen-size-val').textContent = current;
+      notify(`ブラシサイズ: ${current}px`);
+    }
+  }
+}
+  
   // 書き順フィルターの矢印キー操作（書き順ガイド表示時のみ）
-if(document.getElementById('stroke-guide-enabled').checked){
-  const filterInput = document.getElementById('stroke-order-filter');
+  if(document.getElementById('stroke-guide-enabled').checked){
+    const filterInput = document.getElementById('stroke-order-filter');
   // ↑キー：デフォルト→1、または現在値+1
   if(e.key === 'ArrowUp' && filterInput){
     e.preventDefault();
@@ -1718,6 +1748,7 @@ if(document.getElementById('stroke-guide-enabled').checked){
     renderAll();
     return;
   }
+
 }
   
   // 通常の矢印キー（書き順ガイド無効時のみ実行される）
@@ -4384,7 +4415,8 @@ async function exportAllPNG(){
     const folder=zip.folder(pn+'_'+cutName);
     for(let fi=0;fi<cut.totalFrames;fi++){
       offCtx.clearRect(0,0,S.cw,S.ch);
-      for(let li=0;li<LAYER_DEFS.length;li++){
+      // ★修正：レイヤーを逆順で描画（下から上へ：4,3,2,1 → 結果として1が最上位）
+      for(let li=LAYER_DEFS.length-1;li>=0;li--){
         if(!layerVis[li])continue;layerOffCtx.clearRect(0,0,S.cw,S.ch);
         const isDraft=LAYER_DEFS[li].type==='draft';
         // 持続フレーム対応
@@ -4415,7 +4447,6 @@ async function exportAllPNG(){
   URL.revokeObjectURL(a.href);
   prog.style.display='none';notify(`${totalCount}枚のPNGをZIP出力`);
 }
-
 // ===========================================================
 function notify(msg){const el=document.getElementById('notification');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.display='none';},2500);}
 window.addEventListener('load',init);
