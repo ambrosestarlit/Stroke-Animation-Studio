@@ -248,15 +248,33 @@ let scale = 1;
 let translateX = 0;
 let translateY = 0;
 let isDragging = false;
-let startX = 0;
-let startY = 0;
-let startTranslateX = 0;
-let startTranslateY = 0;
 let isPinching = false;
+let startX = 0, startY = 0;
+let startTranslateX = 0, startTranslateY = 0;
 let startPinchDist = 0;
 let startScale = 1;
-let pinchCenterX = 0;
-let pinchCenterY = 0;
+let pinchCenterX = 0, pinchCenterY = 0;
+
+// ── ズーム・パンイベント（ここがメインの追加部分） ──
+function setupViewEvents() {
+  // ホイールでズーム（マウス位置中心）
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (images.length === 0) return;
+
+    const rect = container.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const oldScale = scale;
+    scale = Math.max(0.2, Math.min(8, scale * (e.deltaY < 0 ? 1.15 : 0.85)));
+
+    const ratio = scale / oldScale;
+    translateX = mx - (mx - translateX) * ratio;
+    translateY = my - (my - translateY) * ratio;
+
+    applyTransform();
+  }, { passive: false });
 
 const img = document.getElementById('img');
 const prevBtn = document.getElementById('prevBtn');
@@ -278,6 +296,9 @@ window.addEventListener('DOMContentLoaded', () => {
   updateDisplay();
   setupViewEvents();           // ← 追加：ズーム・パンイベント
 });
+
+// ── タッチイベント（タブレット最優先） ────────────────────────────────
+  let prevTouches = [];
 
 function loadImages() {
   const key = `project:${projectId}:images`;
@@ -329,26 +350,7 @@ function applyTransform() {
   wrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
 }
 
-// ── ズーム・パンイベント（ここがメインの追加部分） ──
-function setupViewEvents() {
-  // ホイールでズーム（マウス位置中心）
-  container.addEventListener('wheel', e => {
-    e.preventDefault();
-    if (images.length === 0) return;
 
-    const rect = container.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    const oldScale = scale;
-    scale = Math.max(0.2, Math.min(8, scale * (e.deltaY < 0 ? 1.15 : 0.85)));
-
-    const ratio = scale / oldScale;
-    translateX = mx - (mx - translateX) * ratio;
-    translateY = my - (my - translateY) * ratio;
-
-    applyTransform();
-  }, { passive: false });
 
   // ドラッグでパン
   container.addEventListener('pointerdown', e => {
@@ -393,6 +395,9 @@ window.addEventListener('pointerup', () => {
 
 // ── マルチタッチ（ピンチズーム）専用処理 ──
 container.addEventListener('touchstart', e => {
+  e.preventDefault();
+  prevTouches = Array.from(e.touches);
+  
   if (e.touches.length === 2) {
     // 2本指 → ピンチ開始
     isPinching = true;
@@ -412,7 +417,7 @@ container.addEventListener('touchstart', e => {
     pinchCenterX = (t1.clientX + t2.clientX) / 2;
     pinchCenterY = (t1.clientY + t2.clientY) / 2;
 
-    e.preventDefault();
+    
   }
 }, { passive: false });
 
