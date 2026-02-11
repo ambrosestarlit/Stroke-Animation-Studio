@@ -1661,7 +1661,69 @@ function onKeyDown(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='c'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxCopyFrame();}
   if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxPasteFrame();}
   if(!e.ctrlKey&&!e.metaKey){if(e.key==='p')selectTool('pen');if(e.key==='l')selectTool('line');if(e.key==='c')selectTool('circle');if(e.key==='r')selectTool('rect');if(e.key==='e')selectTool('eraser');if(e.key==='a')selectTool('point');if(e.key==='s')selectTool('stroke');if(e.key==='v')selectTool('move');}
-  if(e.key==='ArrowRight')goNextFrame();if(e.key==='ArrowLeft')goPrevFrame();
+  
+  // 書き順フィルターの矢印キー操作（書き順ガイド表示時のみ）★先に処理
+  // 書き順フィルターの矢印キー操作（書き順ガイド表示時のみ）
+if(document.getElementById('stroke-guide-enabled').checked){
+  const filterInput = document.getElementById('stroke-order-filter');
+  // ↑キー：デフォルト→1、または現在値+1
+  if(e.key === 'ArrowUp' && filterInput){
+    e.preventDefault();
+    
+    // ★修正：前のフレームから最大orderを計算
+    let maxOrder = 1;
+    if(S.frame > 0){
+      const prevFrame = CF()[S.layer].frames[S.frame - 1];
+      if(prevFrame && prevFrame.strokes && prevFrame.strokes.length > 0){
+        maxOrder = Math.max(...prevFrame.strokes.filter(s => s.type !== 'eraser').map(s => (s.order || 0) + 1));
+      }
+    }
+    
+    console.log('maxOrder (前フレーム):', maxOrder);
+    
+    // 現在の入力値を数値として取得
+    const currentValue = filterInput.value === '' ? null : parseInt(filterInput.value, 10);
+    
+    console.log('currentValue:', currentValue);
+    
+    if(currentValue === null || isNaN(currentValue)){
+      strokeOrderFilter = 1;
+    } else if(currentValue < maxOrder){
+      strokeOrderFilter = currentValue + 1;
+    } else {
+      strokeOrderFilter = currentValue; // 最大値を超えない
+    }
+    
+    console.log('new strokeOrderFilter:', strokeOrderFilter);
+    
+    filterInput.value = strokeOrderFilter;
+    renderAll();
+    return;
+  }
+  // ↓キー：現在値-1、1→デフォルト
+  if(e.key === 'ArrowDown' && filterInput){
+    e.preventDefault();
+    
+    const currentValue = filterInput.value === '' ? null : parseInt(filterInput.value, 10);
+    
+    if(currentValue === null || isNaN(currentValue)){
+      return;
+    } else if(currentValue === 1){
+      strokeOrderFilter = null;
+      filterInput.value = '';
+    } else if(currentValue > 1){
+      strokeOrderFilter = currentValue - 1;
+      filterInput.value = strokeOrderFilter;
+    }
+    renderAll();
+    return;
+  }
+}
+  
+  // 通常の矢印キー（書き順ガイド無効時のみ実行される）
+  if(e.key==='ArrowRight')goNextFrame();
+  if(e.key==='ArrowLeft')goPrevFrame();
+  
   if(e.key==='Escape'){S.rot=0;updateTransform();}
   // Delete/Backspaceでストローク削除（ストローク編集ツール時）
   if((e.key==='Delete'||e.key==='Backspace')&&S.tool==='stroke'&&strokeEditIdx>=0){
@@ -1680,30 +1742,29 @@ function onKeyDown(e){
   }
   // Escで選択解除
   if(e.key==='Escape'&&tlSelected.size>0){tlSelected.clear();updateTimeline();}
-  // テンキーでのキャンバス回転（- で左回転、+ で右回転）
-if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
-  e.preventDefault();
-  S.rot -= 3;  // 左に5度回転（お好みで調整可）
-  updateTransform();
-  document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
-  document.getElementById('rotation-indicator').style.display = 'block';
-  // 少し後に非表示にする（ドラッグ時と同じ挙動）
-  clearTimeout(window._rotHideTimer);
-  window._rotHideTimer = setTimeout(() => {
-    document.getElementById('rotation-indicator').style.display = 'none';
-  }, 1200);
-}
-else if (e.code === 'NumpadAdd' || e.code === 'Equal') {
-  e.preventDefault();
-  S.rot += 3;  // 右に5度回転
-  updateTransform();
-  document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
-  document.getElementById('rotation-indicator').style.display = 'block';
-  clearTimeout(window._rotHideTimer);
-  window._rotHideTimer = setTimeout(() => {
-    document.getElementById('rotation-indicator').style.display = 'none';
-  }, 1200);
-}
+  // テンキーでのキャンバス回転
+  if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
+    e.preventDefault();
+    S.rot -= 3;
+    updateTransform();
+    document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
+    document.getElementById('rotation-indicator').style.display = 'block';
+    clearTimeout(window._rotHideTimer);
+    window._rotHideTimer = setTimeout(() => {
+      document.getElementById('rotation-indicator').style.display = 'none';
+    }, 1200);
+  }
+  else if (e.code === 'NumpadAdd' || e.code === 'Equal') {
+    e.preventDefault();
+    S.rot += 3;
+    updateTransform();
+    document.getElementById('rotation-indicator').textContent = Math.round(S.rot) + '°';
+    document.getElementById('rotation-indicator').style.display = 'block';
+    clearTimeout(window._rotHideTimer);
+    window._rotHideTimer = setTimeout(() => {
+      document.getElementById('rotation-indicator').style.display = 'none';
+    }, 1200);
+  }
 }
 function onKeyUp(e){if(e.code==='Space')spaceHeld=false;if(!e.ctrlKey&&!e.metaKey)ctrlHeld=false;}
 
