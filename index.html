@@ -1537,8 +1537,8 @@ function setupEvents(){
   // コンテキストメニューを閉じる＆タイムライン選択解除
   document.addEventListener('click',e=>{
     hideCtxMenu();
-    // タイムラインセル外クリックで選択解除
-    if(!e.target.closest('.tl-cell')&&!e.target.closest('#ctx-menu')&&tlSelected.size>0){
+    // タイムラインセル外クリックで選択解除（モーダル内は除外）
+    if(!e.target.closest('.tl-cell')&&!e.target.closest('#ctx-menu')&&!e.target.closest('.modal-overlay')&&tlSelected.size>0){
       tlSelected.clear();updateTimeline();
     }
   });
@@ -1920,13 +1920,145 @@ function ctxInsertFrame(){
 }
 function ctxSetDuration(){
   hideCtxMenu();
-  document.getElementById('dur-modal-input').value=CFD()[ctxLayer+'-'+ctxFrame]||1;
+  const key = ctxLayer + '-' + ctxFrame;
+  
+  // モーダルに選択数情報を表示する要素がない場合は追加
+  let infoDiv = document.getElementById('dur-modal-info');
+  if(!infoDiv){
+    const modalBox = document.querySelector('#duration-modal .modal-box');
+    const h3 = modalBox.querySelector('h3');
+    infoDiv = document.createElement('div');
+    infoDiv.id = 'dur-modal-info';
+    infoDiv.style.cssText = 'font-size:11px;color:var(--text-muted);margin-bottom:8px;';
+    h3.after(infoDiv);
+  }
+  
+  // 複数フレーム選択されているか確認
+  if(tlSelected.size > 0 && tlSelected.has(key)){
+    // 複数選択の場合
+    document.getElementById('dur-modal-input').value = CFD()[key] || 1;
+    infoDiv.textContent = `選択中の${tlSelected.size}フレームに一括適用されます`;
+  } else {
+    // 単一フレームの場合
+    document.getElementById('dur-modal-input').value = CFD()[key] || 1;
+    infoDiv.textContent = '';
+  }
+  
   document.getElementById('duration-modal').classList.add('show');
 }
 function applyDurModal(){
   const v=+document.getElementById('dur-modal-input').value;
-  if(v>=1)CFD()[ctxLayer+'-'+ctxFrame]=v;
-  closeModal('duration-modal');updateTimeline();notify(`フレーム${ctxFrame+1} → ${v}f持続`);
+  if(v<1) return;
+  
+  pushUndo();
+  
+  console.log('[applyDurModal] tlSelected:', tlSelected);
+  console.log('[applyDurModal] tlSelected.size:', tlSelected.size);
+  
+  // 複数フレーム選択されている場合
+  if(tlSelected.size > 0){
+    const key = ctxLayer + '-' + ctxFrame;
+    console.log('[applyDurModal] key:', key);
+    console.log('[applyDurModal] tlSelected.has(key):', tlSelected.has(key));
+    
+    // 右クリックしたフレームが選択に含まれている場合のみ一括適用
+    if(tlSelected.has(key)){
+      console.log('[applyDurModal] 複数選択モード - 選択フレーム一覧:');
+      
+      // まず持続時間を全て設定
+      for(const k of tlSelected){
+        console.log('  設定: ' + k + ' → ' + v + 'f');
+        CFD()[k] = v;
+      }
+      
+      console.log('[applyDurModal] CFD():', CFD());
+      
+      // 各レイヤーごとにフレーム配列を再構築
+      const processedLayers = new Set();
+      for(const k of tlSelected){
+        const [li] = k.split('-').map(Number);
+        if(!processedLayers.has(li)){
+          processedLayers.add(li);
+          console.log('[applyDurModal] レイヤー' + li + 'を再構築');
+          rebuildFramesForLayer(li);
+        }
+      }
+      
+      closeModal('duration-modal');
+      updateTimeline();
+      notify(`選択中の${tlSelected.size}フレームの持続時間を ${v}f に設定`);
+      return;
+    }
+  }
+  
+  // 単一フレームの場合
+  console.log('[applyDurModal] 単一フレームモード');
+  CFD()[ctxLayer + '-' + ctxFrame] = v;
+  rebuildFramesForLayer(ctxLayer);
+  
+  closeModal('duration-modal');
+  updateTimeline();
+  notify(`フレーム${ctxFrame+1} → ${v}f持続`);
+}
+
+// レイヤーのフレーム配列を持続設定に基づいて再構築
+function rebuildFramesForLayer(li){
+  const frames = CF()[li].frames;
+  const dur = CFD();
+  const newFrames = [];
+  
+  console.log('[rebuildFramesForLayer] レイヤー' + li + '処理開始');
+  console.log('[rebuildFramesForLayer] 元のフレーム数:', frames.length);
+  
+  // 元のフレームデータを保持しているフレームを探す
+  const keyFrames = [];
+  for(let fi = 0; fi < frames.length; fi++){
+    const fr = frames[fi];
+    if(fr && (fr.strokes.length > 0 || fr.draftImg)){
+      const duration = dur[li + '-' + fi] || 1;
+      keyFrames.push({index: fi, frame: fr, duration: duration});
+      console.log('[rebuildFramesForLayer] キーフレーム検出: index=' + fi + ', duration=' + duration);
+    }
+  }
+  
+  console.log('[rebuildFramesForLayer] キーフレーム総数:', keyFrames.length);
+  
+  // 持続設定に基づいて新しいフレーム配列を構築
+  for(const kf of keyFrames){
+    // キーフレームを追加
+    newFrames.push(kf.frame);
+    
+    // 持続フレーム分の空フレームを追加
+    for(let i = 1; i < kf.duration; i++){
+      newFrames.push({strokes:[], draftImg:null});
+    }
+  }
+  
+  console.log('[rebuildFramesForLayer] 新しいフレーム数:', newFrames.length);
+  
+  // フレーム配列を置き換え
+  CF()[li].frames = newFrames;
+  
+  // 持続設定のインデックスを更新
+  let currentIndex = 0;
+  for(const kf of keyFrames){
+    const oldKey = li + '-' + kf.index;
+    const newKey = li + '-' + currentIndex;
+    
+    if(oldKey !== newKey){
+      if(dur[oldKey]){
+        dur[newKey] = dur[oldKey];
+        delete dur[oldKey];
+        console.log('[rebuildFramesForLayer] 持続設定移動: ' + oldKey + ' → ' + newKey);
+      }
+    }
+    
+    currentIndex += kf.duration;
+  }
+  
+  // 総フレーム数を更新
+  CC().totalFrames = Math.max(CC().totalFrames, newFrames.length);
+  console.log('[rebuildFramesForLayer] 総フレーム数更新:', CC().totalFrames);
 }
 
 // ===========================================================
