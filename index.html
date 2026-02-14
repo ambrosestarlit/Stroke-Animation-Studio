@@ -1701,10 +1701,30 @@ function onUp(e){
 }
 function onWheel(e){e.preventDefault();const a=document.getElementById('canvas-area').getBoundingClientRect();const mx=e.clientX-a.left,my=e.clientY-a.top;const old=S.zoom;S.zoom=Math.max(0.1,Math.min(10,S.zoom*(e.deltaY>0?0.9:1.1)));S.panX=mx-(mx-S.panX)*(S.zoom/old);S.panY=my-(my-S.panY)*(S.zoom/old);updateTransform();}
 function onKeyDown(e){
+  // 入力フィールド（input, textarea, select）にフォーカスがある場合はショートカットを無効化
+  const activeElement = document.activeElement;
+  const isInputFocused = activeElement && (
+    activeElement.tagName === 'INPUT' || 
+    activeElement.tagName === 'TEXTAREA' || 
+    activeElement.tagName === 'SELECT' ||
+    activeElement.isContentEditable
+  );
+  
   if(e.code==='Space'){spaceHeld=true;e.preventDefault();}
   if(e.ctrlKey||e.metaKey)ctrlHeld=true;
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undoAction();}
-  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redoAction();}
+  
+  // アンドゥ/リドゥは Shift+Z/Y で常に有効（入力フィールド内でも動作）
+  if(e.shiftKey&&e.key==='Z'&&!e.ctrlKey&&!e.metaKey){e.preventDefault();undoAction();return;}
+  if(e.shiftKey&&e.key==='Y'&&!e.ctrlKey&&!e.metaKey){e.preventDefault();redoAction();return;}
+  
+  // 入力フィールドにフォーカスがある場合、Ctrl+S/C/Vのみ通常動作を許可（テキスト編集用）
+  if(isInputFocused){
+    // Ctrl+Sは保存を優先
+    if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
+    return; // その他のショートカットは入力フィールドのデフォルト動作に任せる
+  }
+  
+  // 以下は入力フィールド外でのみ動作
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
   if((e.ctrlKey||e.metaKey)&&e.key==='c'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxCopyFrame();}
   if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxPasteFrame();}
