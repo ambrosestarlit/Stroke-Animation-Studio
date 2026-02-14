@@ -1610,11 +1610,18 @@ function onUp(e){
   if(S.tool==='pen'&&curPoints.length>=2){
     const sm=smoothPoints(curPoints);
     const newStroke = {type:'bezier',controls:toBezier(sm),color:S.penColor,size:S.penSize,order:fr.strokes.length};
-    // ★ 吸着が有効な場合、既存ストロークに吸着
+    // ★ 吸着が有効な場合、すべてのレイヤーの既存ストロークに吸着
     if(snapEnabled){
-  const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, snapDistance, snapFullStroke);
-  fr.strokes.push(snapped);
-} else {
+      // すべてのレイヤーのストロークを収集
+      const allStrokes = [];
+      CF().forEach(layer => {
+        if(layer.frames[S.frame] && layer.frames[S.frame].strokes){
+          allStrokes.push(...layer.frames[S.frame].strokes);
+        }
+      });
+      const snapped = snapNewStrokeToExisting(newStroke, allStrokes, snapDistance, snapFullStroke);
+      fr.strokes.push(snapped);
+    } else {
       fr.strokes.push(newStroke);
     }
   }
@@ -1625,7 +1632,14 @@ function onUp(e){
   else if(S.tool==='line'&&shapeStart){
     const newStroke = {type:'line',x1:shapeStart.x,y1:shapeStart.y,x2:p.x,y2:p.y,color:S.penColor,size:S.penSize,order:fr.strokes.length};
     if(snapEnabled){
-      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10, snapFullStroke);
+      // すべてのレイヤーのストロークを収集
+      const allStrokes = [];
+      CF().forEach(layer => {
+        if(layer.frames[S.frame] && layer.frames[S.frame].strokes){
+          allStrokes.push(...layer.frames[S.frame].strokes);
+        }
+      });
+      const snapped = snapNewStrokeToExisting(newStroke, allStrokes, 10, snapFullStroke);
       fr.strokes.push(snapped);
     } else {
       fr.strokes.push(newStroke);
@@ -1634,7 +1648,14 @@ function onUp(e){
   else if(S.tool==='circle'&&shapeStart){
     const newStroke = {type:'ellipse',cx:(shapeStart.x+p.x)/2,cy:(shapeStart.y+p.y)/2,rx:Math.abs(p.x-shapeStart.x)/2,ry:Math.abs(p.y-shapeStart.y)/2,color:S.penColor,size:S.penSize,order:fr.strokes.length};
     if(snapEnabled){
-      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10, snapFullStroke);
+      // すべてのレイヤーのストロークを収集
+      const allStrokes = [];
+      CF().forEach(layer => {
+        if(layer.frames[S.frame] && layer.frames[S.frame].strokes){
+          allStrokes.push(...layer.frames[S.frame].strokes);
+        }
+      });
+      const snapped = snapNewStrokeToExisting(newStroke, allStrokes, 10, snapFullStroke);
       fr.strokes.push(snapped);
     } else {
       fr.strokes.push(newStroke);
@@ -1643,7 +1664,14 @@ function onUp(e){
   else if(S.tool==='rect'&&shapeStart){
     const newStroke = {type:'rect',x:Math.min(shapeStart.x,p.x),y:Math.min(shapeStart.y,p.y),w:Math.abs(p.x-shapeStart.x),h:Math.abs(p.y-shapeStart.y),color:S.penColor,size:S.penSize,order:fr.strokes.length};
     if(snapEnabled){
-      const snapped = snapNewStrokeToExisting(newStroke, fr.strokes, 10, snapFullStroke);
+      // すべてのレイヤーのストロークを収集
+      const allStrokes = [];
+      CF().forEach(layer => {
+        if(layer.frames[S.frame] && layer.frames[S.frame].strokes){
+          allStrokes.push(...layer.frames[S.frame].strokes);
+        }
+      });
+      const snapped = snapNewStrokeToExisting(newStroke, allStrokes, 10, snapFullStroke);
       fr.strokes.push(snapped);
     } else {
       fr.strokes.push(newStroke);
@@ -4060,11 +4088,16 @@ function generateInbetweens() {
     // 補間後スムージング
     const smoothed = smoothInterpolatedStrokes(interp);
 
-    // ★ ここを変更：常に吸着適用（チェックボックス無視）
-    // 距離はメインのスライダー値（snapDistance）を使う
-    const existing = CF()[targetLayer].frames[sf].strokes.concat(
-      CF()[targetLayer].frames[ef].strokes
-    );
+    // ★ すべてのレイヤーのストロークを収集して吸着
+    const existing = [];
+    CF().forEach(layer => {
+      if(layer.frames[sf] && layer.frames[sf].strokes){
+        existing.push(...layer.frames[sf].strokes);
+      }
+      if(layer.frames[ef] && layer.frames[ef].strokes){
+        existing.push(...layer.frames[ef].strokes);
+      }
+    });
 
     const finalStroke = snapNewStrokeToExisting(
       smoothed,
@@ -4084,24 +4117,6 @@ function generateInbetweens() {
   updateTimeline();
   goToFrame(sf + 1);
   renderAll();
-  notify(`${cnt}枚の中割をレイヤー${targetLayer + 1}に生成しました（常に吸着適用）`);
-
-    
-   
-    CF()[targetLayer].frames.splice(insertPos, 0, {
-      strokes: finalStroke,
-      draftImg: null
-    });
-
-    insertPos++;
-  
-
-  closeModal('inbetween-dialog');
-  updateTimeline();
-  goToFrame(sf + 1);
-  renderAll();
-
-  notify(`${cnt}枚の中割をレイヤー${targetLayer + 1}に生成しました`);
 }
 function interpStrokes(sa,sb,t,ease){const et=applyEase(t,ease);const r=[];const mx=Math.max(sa.length,sb.length);for(let i=0;i<mx;i++){const a=i<sa.length?sa[i]:null,b=i<sb.length?sb[i]:null;if(a&&b&&a.type===b.type)r.push(interpOne(a,b,et));else if(a&&!b)r.push(fadeS(a,1-et));else if(!a&&b)r.push(fadeS(b,et));else if(a&&b){et<0.5?r.push(fadeS(a,1-et*2)):r.push(fadeS(b,(et-0.5)*2));}}return r;}
 
