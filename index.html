@@ -163,7 +163,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
 .tl-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 .tl-info{font-size:11px;color:var(--text-secondary);margin-left:6px;}
 .tl-info span{color:var(--text-primary);font-weight:600;}
-#fps-input{width:36px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;font-size:11px;border-radius:3px;text-align:center;}
+#fps-input{width:50px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;font-size:10px;border-radius:3px;text-align:center;}
 #timeline-body{flex:1;display:flex;overflow:hidden;}
 #tl-layer-labels{width:100px;background:var(--bg-secondary);border-right:1px solid var(--border);overflow:hidden;flex-shrink:0;}
 #tl-layer-labels-inner{padding-top:18px;}
@@ -642,12 +642,12 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   <span class="app-title">✦ Stroke Animation Studio</span>
   <input type="text" id="project-name-input" placeholder="プロジェクト名" value="untitled">
   <div class="header-sep"></div>
+  <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
   <button class="header-btn" onclick="newProject()">新規</button>
   <button class="header-btn" onclick="saveProject()">💾 保存</button>
   <button class="header-btn" onclick="loadProject()">📂 開く</button>
   <div class="header-sep"></div>
   <button class="header-btn" onclick="showCanvasSizeDialog()">キャンバスサイズ</button>
-  <button class="header-btn" onclick="importAudioFile()">🎵 音声読込</button>
   <button class="header-btn" onclick="importDraftImage()">下書き読込</button>
   <button class="header-btn" onclick="importSequenceImages()">📁 連番読込</button>
   <div class="header-sep"></div>
@@ -807,9 +807,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <div class="panel-header">レイヤー</div>
       <div class="panel-body" id="layer-list"></div>
       <div class="layer-actions"><button class="layer-action-btn" onclick="clearCurrentLayer()">クリア</button><button class="layer-action-btn" onclick="clearAllLayers()">全クリア</button><button class="layer-action-btn" onclick="duplicateFrame()">複製</button></div>
-      <div class="onion-row" style="margin-top:4px;"><label>下書き不透明度</label><input type="range" id="draft-opacity" min="0" max="100" value="40" style="width:60px;" oninput="draftOpacity=this.value/100;document.getElementById('draft-opacity-val').textContent=this.value+'%';renderAll();"><span id="draft-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">40%</span></div>
-      <div class="onion-row"><label>オニオン不透明度</label><input type="range" id="onion-opacity" min="0" max="100" value="100" style="width:60px;" oninput="document.getElementById('onion-canvas').style.opacity=this.value/100;document.getElementById('onion-opacity-val').textContent=this.value+'%';"><span id="onion-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">100%</span></div>
-    </div>
+          </div>
     <div class="panel-section">
       <div class="panel-header">オニオンスキン</div>
       <div class="panel-body">
@@ -824,8 +822,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
       <div class="panel-body">
         <div class="onion-row"><label>幅</label><input type="number" id="info-width" value="2600" min="1" max="8192" onchange="applyProjectInfo()"></div>
         <div class="onion-row"><label>高さ</label><input type="number" id="info-height" value="1500" min="1" max="8192" onchange="applyProjectInfo()"></div>
-        <div class="onion-row"><label>フレーム数</label><input type="number" id="info-frames" value="24" min="1" max="9999" onchange="applyProjectInfoFrames()"></div>
+        <div class="onion-row"><label>ＦＰＳ</label><input type="number" id="fps-input" value="24" min="1" max="60" onchange="updateFPS()"></div>
+        
       </div>
+      
     </div>
     <div class="panel-section">
       <div class="panel-header">枠ガイド</div>
@@ -857,15 +857,14 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <button class="tl-btn" onclick="goNextFrame()" title="次">▶</button>
     <button class="tl-btn" onclick="goLastFrame()" title="最後">⏭</button>
     <div class="header-sep"></div>
-    <button class="tl-btn" onclick="addFrame()" title="フレーム追加">＋</button>
-    <button class="tl-btn" onclick="removeFrame()" title="フレーム削除">－</button>
-    <button class="tl-btn" onclick="insertKeyframe()" title="キーフレーム挿入">◆</button>
+    
     <div class="header-sep"></div>
-    <span class="tl-info">フレーム: <span id="current-frame-display">1</span>/<span id="total-frame-display">24</span></span>
+    <div class="onion-row"><label>フレーム数</label><input type="number" id="info-frames" value="24" min="1" max="9999" onchange="applyProjectInfoFrames()"></div>
+    
     <div class="header-sep"></div>
-    <span class="tl-info">FPS:</span><input type="number" id="fps-input" value="24" min="1" max="60" onchange="updateFPS()">
+    
     <div class="header-sep"></div>
-    <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
+    
     <div class="header-sep"></div>
     <button class="header-btn" onclick="clearCurrentLayer()">🗑️ クリア</button>
     <button class="header-btn" onclick="clearAllLayers()">🗑️ 全クリア</button>
@@ -873,7 +872,9 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <button class="header-btn" onclick="toggleOnionSkin()" title="オニオンスキン">🧅 オニオンスキン</button>
     <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
     <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
-    
+    <div class="onion-row" style="margin-top:4px;"><label>下書き不透明度</label><input type="range" id="draft-opacity" min="0" max="100" value="40" style="width:60px;" oninput="draftOpacity=this.value/100;document.getElementById('draft-opacity-val').textContent=this.value+'%';renderAll();"><span id="draft-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">40%</span></div>
+      <div class="onion-row"><label>オニオン不透明度</label><input type="range" id="onion-opacity" min="0" max="100" value="100" style="width:60px;" oninput="document.getElementById('onion-canvas').style.opacity=this.value/100;document.getElementById('onion-opacity-val').textContent=this.value+'%';"><span id="onion-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">100%</span></div>
+
     <div class="header-sep"></div>
     <div id="view-tools">
       <button class="header-btn view-tool-btn" id="vt-pan" onclick="setViewTool('pan')">✋画面移動</button>
@@ -915,7 +916,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     </div>
     <!-- 音声ラベルはここに固定で入れる -->
     <div id="tl-audio-label-row" class="tl-layer-label" style="height:24px; background:var(--bg-tertiary); font-weight:bold; border-bottom:1px solid var(--border);">
-      <span class="dot" style="background:#e94560; margin-right:6px;"></span>音声
+      <span class="dot" style="background:#e94560; margin-right:6px;"></span>フレーム情報
     </div>
   </div>
 
@@ -924,12 +925,9 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div id="tl-frames-area">
       <div id="tl-header"></div>
       <div id="tl-rows"></div>
-      <!-- 音声波形行はここ（最下部）に固定配置 -->
-      <!-- 元の波形部分をコメントアウトまたは削除して、以下のようにシンプルに -->
+      <!-- 現在フレーム行はここ（最下部）に固定配置 -->
 <div id="tl-audio-row" style="height:24px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:sticky; bottom:0; z-index:1; width:100%; min-width:fit-content; display:flex; align-items:center; padding-left:8px;">
-  <div style="color:#e94560; font-weight:bold; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" id="audio-filename-display">
-    音声なし
-  </div>
+  <span class="tl-info">フレーム: <span id="current-frame-display">1</span>/<span id="total-frame-display">24</span></span>
   <div style="margin-left:12px; font-size:10px; color:var(--text-muted);" id="audio-duration-display">
     <!-- 長さとか表示したい場合はここ -->
   </div>
