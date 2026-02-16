@@ -871,6 +871,7 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
     <div class="header-sep"></div>
     <button class="header-btn" onclick="toggleOnionSkin()" title="オニオンスキン">🧅 オニオンスキン</button>
     <button class="header-btn" onclick="showInbetweenDialog()">🎬 自動中割</button>
+    <button class="header-btn" onclick="showAutoFillDialog()">🎨 自動下塗り</button>
     <button class="header-btn" onclick="toggleStrokeGuide()">✏️ 書き順ガイド</button>
     <div class="onion-row" style="margin-top:4px;"><label>下書き不透明度</label><input type="range" id="draft-opacity" min="0" max="100" value="40" style="width:60px;" oninput="draftOpacity=this.value/100;document.getElementById('draft-opacity-val').textContent=this.value+'%';renderAll();"><span id="draft-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">40%</span></div>
       <div class="onion-row"><label>オニオン不透明度</label><input type="range" id="onion-opacity" min="0" max="100" value="100" style="width:60px;" oninput="document.getElementById('onion-canvas').style.opacity=this.value/100;document.getElementById('onion-opacity-val').textContent=this.value+'%';"><span id="onion-opacity-val" style="font-size:10px;color:var(--text-secondary);margin-left:4px;">100%</span></div>
@@ -982,6 +983,10 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
           <input type="checkbox" id="inb-layer-3">
           <span>原画4</span>
         </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="inb-layer-4">
+          <span>下塗り</span>
+        </label>
       </div>
     </div>
     
@@ -1009,6 +1014,9 @@ const LAYER_DEFS = [
   {id:'draw2_ui', name:'原画2', color:'var(--layer-color-2)', type:'draw'},
   {id:'draw3_ui', name:'原画3', color:'var(--layer-color-3)', type:'draw'},
   {id:'draw4_ui', name:'原画4', color:'var(--layer-color-4)', type:'draw'},  // 元の原画1と同じ色
+  
+  // 下塗りレイヤー
+  {id:'fill_ui', name:'下塗り', color:'var(--layer-color-1)', type:'draw'},
 
   // 下書きも同様に名前を逆転
   {id:'draft1_ui', name:'下書き1', color:'var(--draft-color-4)', type:'draft'},  // 元の下書き4の色
@@ -2499,6 +2507,7 @@ function drawStroke(ctx,s){
   else if(s.type==='line'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();}
   else if(s.type==='ellipse'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.ellipse(s.cx,s.cy,Math.max(1,s.rx),Math.max(1,s.ry),0,0,Math.PI*2);ctx.stroke();}
   else if(s.type==='rect'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.beginPath();ctx.rect(s.x,s.y,s.w,s.h);ctx.stroke();}
+  else if(s.type==='fill_result'){if(s.imageData){ctx.putImageData(s.imageData,0,0);}}
 }
 // 二値化：アルファ値を閾値で0か255に変換（アンチエイリアス除去）
 function binarizeCanvas(ctx,w,h){
@@ -4105,11 +4114,11 @@ function showInbetweenDialog(){
   document.getElementById('inb-count').value=3;
   
   // すべてのレイヤーチェックボックスをリセット
-  for(let i=0;i<4;i++){
+  for(let i=0;i<5;i++){
     document.getElementById(`inb-layer-${i}`).checked = false;
   }
   // 現在のレイヤーのみチェック
-  if(S.layer >= 0 && S.layer < 4){
+  if(S.layer >= 0 && S.layer < 5){
     document.getElementById(`inb-layer-${S.layer}`).checked = true;
   }
   
@@ -4128,7 +4137,7 @@ function generateInbetweens() {
 
   // チェックされたレイヤーを取得
   const targetLayers = [];
-  for(let i=0;i<4;i++){
+  for(let i=0;i<5;i++){
     if(document.getElementById(`inb-layer-${i}`).checked){
       targetLayers.push(i);
     }
@@ -5504,6 +5513,706 @@ function changeLayerLineColor(layerIndex, newColor) {
   } else {
     notify('変更対象の線画が見つかりませんでした');
   }
+}
+
+// ============ 自動下塗り機能 ============
+function showAutoFillDialog() {
+  if (cuts.length === 0) {
+    notify('下塗りにはカットが必要です');
+    return;
+  }
+
+  // 下塗りレイヤーのインデックスを取得
+  const fillLayerIndex = LAYER_DEFS.findIndex(layer => layer.name === '下塗り');
+  
+  if (fillLayerIndex === -1) {
+    notify('下塗りレイヤーが見つかりません');
+    return;
+  }
+
+  // ダイアログHTMLを作成
+  const dialogHTML = `
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); 
+                background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; 
+                padding:20px; z-index:10000; box-shadow:0 10px 40px rgba(0,0,0,0.8); width:500px;">
+      <h3 style="margin:0 0 15px 0; color:var(--text-primary);">自動下塗り設定</h3>
+      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:15px;">
+        下塗りレイヤーに色を置いてから実行してください。<br>
+        黒で囲まれた範囲を自動的に塗りつぶします。
+      </p>
+      <div style="margin:15px 0;">
+        <label style="display:block; margin-bottom:5px; font-size:12px;">拡張ピクセル数: <span id="fill-expand-value">2</span>px</label>
+        <input type="range" id="fill-expand" min="0" max="10" value="2" style="width:100%;" 
+               oninput="document.getElementById('fill-expand-value').textContent=this.value; updateAutoFillPreview();">
+      </div>
+      <div style="margin:20px 0;">
+        <canvas id="fill-preview" width="460" height="260" 
+                style="width:100%; border:1px solid var(--border); background:#000; display:block;"></canvas>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:20px; justify-content:flex-end;">
+        <button class="header-btn" onclick="executeAutoFill(${fillLayerIndex})" 
+                style="background:var(--accent); color:#fff;">実行</button>
+        <button class="header-btn" onclick="closeAutoFillDialog()">キャンセル</button>
+      </div>
+    </div>
+    <div id="auto-fill-overlay" style="position:fixed; top:0; left:0; width:100vw; height:100vh; 
+         background:rgba(0,0,0,0.7); z-index:9999;" onclick="closeAutoFillDialog()"></div>
+  `;
+
+  const dialogContainer = document.createElement('div');
+  dialogContainer.id = 'auto-fill-dialog';
+  dialogContainer.innerHTML = dialogHTML;
+  document.body.appendChild(dialogContainer);
+
+  // 初期プレビュー更新
+  setTimeout(() => updateAutoFillPreview(), 100);
+}
+
+function updateAutoFillPreview() {
+  const canvas = document.getElementById('fill-preview');
+  if (!canvas) {
+    console.log('プレビューキャンバスが見つかりません');
+    return;
+  }
+  
+  console.log('プレビュー更新開始');
+  
+  const ctx = canvas.getContext('2d');
+  const luminanceThreshold = parseInt(document.getElementById('fill-luminance').value);
+  
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const currentCutData = CF();
+  const fillLayerIndex = LAYER_DEFS.findIndex(layer => layer.name === '下塗り');
+  
+  console.log('fillLayerIndex:', fillLayerIndex);
+  
+  // すべての原画レイヤーを合成して線画を作成
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = S.cw;
+  tempCanvas.height = S.ch;
+  const tempCtx = tempCanvas.getContext('2d');
+  
+  let lineArtCount = 0;
+  LAYER_DEFS.forEach((layerDef, idx) => {
+    if (idx !== fillLayerIndex && layerVis[idx] && layerDef.type === 'draw') {
+      const frameData = currentCutData[idx].frames[S.frame];
+      if (frameData && frameData.strokes) {
+        frameData.strokes.forEach(stroke => {
+          drawStrokeToContext(tempCtx, stroke);
+          lineArtCount++;
+        });
+      }
+    }
+  });
+  
+  console.log('線画ストローク数:', lineArtCount);
+
+  // 下塗りレイヤーを取得
+  const fillCanvas = document.createElement('canvas');
+  fillCanvas.width = S.cw;
+  fillCanvas.height = S.ch;
+  const fillCtx = fillCanvas.getContext('2d');
+  
+  let fillCount = 0;
+  if (fillLayerIndex >= 0) {
+    const fillFrameData = currentCutData[fillLayerIndex].frames[S.frame];
+    if (fillFrameData && fillFrameData.strokes) {
+      fillFrameData.strokes.forEach(stroke => {
+        drawStrokeToContext(fillCtx, stroke);
+        fillCount++;
+      });
+    }
+  }
+  
+  console.log('下塗りストローク数:', fillCount);
+  
+  // デバッグ: 線画の内容を確認
+  const tempCtxData = tempCtx.getImageData(0, 0, S.cw, S.ch);
+  let lineArtPixels = 0;
+  for (let i = 0; i < tempCtxData.data.length; i += 4) {
+    if (tempCtxData.data[i + 3] > 0) {
+      lineArtPixels++;
+    }
+  }
+  console.log('線画の不透明ピクセル数:', lineArtPixels);
+
+  // 実際に塗りつぶし処理を実行してプレビュー
+  if (lineArtCount > 0 && fillCount > 0) {
+    console.log('塗りつぶしプレビュー生成中...');
+    const resultCanvas = generateFill(tempCanvas, fillCanvas, luminanceThreshold, parseInt(document.getElementById('fill-expand').value) || 2);
+    
+    // プレビューに描画
+    const scale = Math.min(canvas.width / S.cw, canvas.height / S.ch);
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = 1.0;
+    ctx.drawImage(resultCanvas, 0, 0);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(tempCanvas, 0, 0); // 線画を薄く重ねて表示
+    ctx.restore();
+    console.log('プレビュー更新完了（塗りつぶし結果表示）');
+  } else {
+    // プレビューに描画（線画と下塗りヒントのみ）
+    const scale = Math.min(canvas.width / S.cw, canvas.height / S.ch);
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = 0.7;
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(fillCanvas, 0, 0);
+    ctx.restore();
+    
+    console.log('プレビュー更新完了（線画+ヒント表示）');
+  }
+}
+
+function drawStrokeToContext(ctx, stroke) {
+  if (!stroke) return;
+  
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalCompositeOperation = 'source-over';
+  
+  if (stroke.type === 'bezier') {
+    ctx.strokeStyle = stroke.color || '#000000';
+    ctx.lineWidth = stroke.size || 2;
+    ctx.beginPath();
+    if (stroke.controls && stroke.controls.length > 0) {
+      ctx.moveTo(stroke.controls[0].sx, stroke.controls[0].sy);
+      for (const c of stroke.controls) {
+        ctx.quadraticCurveTo(c.cx, c.cy, c.ex, c.ey);
+      }
+    }
+    ctx.stroke();
+  } else if (stroke.type === 'line') {
+    ctx.strokeStyle = stroke.color || '#000000';
+    ctx.lineWidth = stroke.size || 2;
+    ctx.beginPath();
+    ctx.moveTo(stroke.x1, stroke.y1);
+    ctx.lineTo(stroke.x2, stroke.y2);
+    ctx.stroke();
+  } else if (stroke.type === 'ellipse') {
+    ctx.strokeStyle = stroke.color || '#000000';
+    ctx.lineWidth = stroke.size || 2;
+    ctx.beginPath();
+    ctx.ellipse(stroke.cx, stroke.cy, Math.max(1, stroke.rx), Math.max(1, stroke.ry), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (stroke.type === 'rect') {
+    ctx.strokeStyle = stroke.color || '#000000';
+    ctx.lineWidth = stroke.size || 2;
+    ctx.beginPath();
+    ctx.rect(stroke.x, stroke.y, stroke.w, stroke.h);
+    ctx.stroke();
+  }
+}
+
+function executeAutoFill(fillLayerIndex) {
+  const currentCutData = cuts[currentCut]?.layers;
+  const totalFrames    = cuts[currentCut]?.totalFrames ?? 0;
+
+  if (!currentCutData || !Array.isArray(currentCutData)) {
+    console.error("currentCutData が正しく取得できませんでした");
+    notify("カットまたはレイヤーデータが存在しません。ページをリロードしてください");
+    closeAutoFillDialog();
+    return;
+  }
+
+  if (totalFrames <= 0) {
+    console.error("totalFrames が0または未定義です");
+    notify("フレーム数が正しくありません");
+    closeAutoFillDialog();
+    return;
+  }
+
+  const expandInput = document.getElementById('fill-expand');
+  const expandPixels = expandInput ? (parseInt(expandInput.value) || 2) : 2;
+
+  // 透過指示色 #87FF42 の判定（最終クリア用）
+  const isTransparentColor = (r, g, b) => {
+    return (
+      Math.abs(r - 135) <= 12 &&
+      Math.abs(g - 255) <= 12 &&
+      Math.abs(b -  66) <= 12
+    );
+  };
+
+  pushUndo();
+  let processedCount = 0;
+
+  for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
+    const fillFrame = currentCutData[fillLayerIndex].frames[frameIdx];
+    if (!fillFrame || !fillFrame.strokes || fillFrame.strokes.length === 0) {
+      console.log(`フレーム ${frameIdx + 1} はストロークなし → スキップ`);
+      continue;
+    }
+
+    console.log(`フレーム ${frameIdx + 1}/${totalFrames} 処理開始`);
+
+    // 1. 下塗りヒントキャンバス（ベクター線画含む）
+    const fillCanvas = document.createElement('canvas');
+    fillCanvas.width = S.cw;
+    fillCanvas.height = S.ch;
+    const fillCtx = fillCanvas.getContext('2d', { willReadFrequently: true });
+
+    fillFrame.strokes.forEach(stroke => {
+      drawStrokeToContext(fillCtx, stroke);
+    });
+
+    // 2. 線画キャンバス（他のレイヤー）
+    const lineArtCanvas = document.createElement('canvas');
+    lineArtCanvas.width = S.cw;
+    lineArtCanvas.height = S.ch;
+    const lineArtCtx = lineArtCanvas.getContext('2d');
+
+    LAYER_DEFS.forEach((layerDef, idx) => {
+      if (idx !== fillLayerIndex && layerVis[idx] && layerDef.type === 'draw') {
+        const frameData = currentCutData[idx].frames[frameIdx];
+        if (frameData && frameData.strokes) {
+          frameData.strokes.forEach(stroke => {
+            drawStrokeToContext(lineArtCtx, stroke);
+          });
+        }
+      }
+    });
+
+    // 3. 自動塗りつぶし
+    let resultCanvas = generateFill(lineArtCanvas, fillCanvas, 128, expandPixels);
+
+    // 4. 最終透過クリア（#87FF42系を透明化）
+    const finalCtx = resultCanvas.getContext('2d', { willReadFrequently: true });
+    const finalImgData = finalCtx.getImageData(0, 0, S.cw, S.ch);
+    const pixels = finalImgData.data;
+
+    let clearedCount = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const a = pixels[i + 3];
+
+      if (a > 0 && isTransparentColor(r, g, b)) {
+        pixels[i + 3] = 0;
+        clearedCount++;
+      }
+    }
+
+    if (clearedCount > 0) {
+      console.log(`フレーム ${frameIdx + 1}: #87FF42系 ${clearedCount}ピクセル透明化`);
+    }
+
+    finalCtx.putImageData(finalImgData, 0, 0);
+
+    // ★★★★★ ここが新しく追加：下塗りレイヤーのベクター線画をすべて削除 ★★★★★
+    // fill_result を追加する前に、元のベクター系ストロークを全除去
+    const vectorTypes = ['bezier', 'line', 'ellipse', 'rect', 'polyline', 'polygon']; // 必要に応じて追加
+    fillFrame.strokes = fillFrame.strokes.filter(stroke => {
+      if (vectorTypes.includes(stroke.type)) {
+        console.log(`フレーム ${frameIdx + 1}: ベクター線画削除 (${stroke.type})`);
+        return false;
+      }
+      return true;
+    });
+
+    // 5. クリア済み結果を最下層に追加
+    const finalStroke = {
+      type: 'fill_result',
+      imageData: finalCtx.getImageData(0, 0, S.cw, S.ch)
+    };
+
+    fillFrame.strokes.unshift(finalStroke);
+    processedCount++;
+  }
+
+  closeAutoFillDialog();
+  renderAll();
+  notify(`自動下塗り完了 (${processedCount}フレーム) - ベクター線画はすべて削除済み`);
+}
+
+function closeAutoFillDialog() {
+  const dialog = document.getElementById('auto-fill-dialog');
+  if (dialog) {
+    dialog.remove();
+  }
+}
+
+// ============ 塗りつぶし処理 ============
+function generateFill(lineArtCanvas, colorHintCanvas, luminanceThreshold, expandPixels) {
+  console.log('generateFill開始:', {width: lineArtCanvas.width, height: lineArtCanvas.height, expandPixels});
+  
+  const width = lineArtCanvas.width;
+  const height = lineArtCanvas.height;
+  
+  const resultCanvas = document.createElement('canvas');
+  resultCanvas.width = width;
+  resultCanvas.height = height;
+  const resultCtx = resultCanvas.getContext('2d');
+  
+  // 線画を直接使用（スケルトン化不要）
+  console.log('線画データ取得中...');
+  const lineArtCtx = lineArtCanvas.getContext('2d', { willReadFrequently: true });
+  const lineArtData = lineArtCtx.getImageData(0, 0, width, height);
+  
+  // 線画の不透明ピクセルをバリアとして使用
+  const barrier = new Array(width * height).fill(false);
+  let barrierPixels = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const a = lineArtData.data[idx + 3];
+      
+      // 不透明なピクセルは線画（バリア）
+      if (a > 128) {
+        barrier[y * width + x] = true;
+        barrierPixels++;
+      }
+    }
+  }
+  
+  console.log('線画バリアピクセル数:', barrierPixels);
+  
+  // 下塗りヒントから色を取得
+  const colorHintCtx = colorHintCanvas.getContext('2d', { willReadFrequently: true });
+  const colorHintData = colorHintCtx.getImageData(0, 0, width, height);
+  const uniqueColors = getUniqueColors(colorHintData, width, height);
+  
+  console.log('ユニーク色数:', uniqueColors.length);
+  
+  const visited = new Array(width * height).fill(false);
+  
+  let totalFilledPoints = 0;
+  let colorIndex = 0;
+  
+  uniqueColors.forEach(color => {
+    const points = getPointsWithColor(colorHintData, width, height, color);
+    
+    if (colorIndex < 3) {
+      console.log(`色${colorIndex}: rgb(${color.r},${color.g},${color.b}), ポイント数=${points.length}`);
+    }
+    
+    points.forEach(point => {
+      const idx = point.y * width + point.x;
+      if (visited[idx]) return;
+      
+      // 塗りつぶし（バリアは線画の不透明ピクセル）
+      const filledPoints = floodFillWithBarrier(barrier, visited, point.x, point.y, width, height);
+      
+      totalFilledPoints += filledPoints.length;
+      
+      if (colorIndex < 3 && filledPoints.length > 0) {
+        console.log(`  開始点(${point.x},${point.y})から ${filledPoints.length} ポイント塗りつぶし`);
+      }
+      
+      // 塗りつぶし領域の主要色を決定
+      const colorCount = {};
+      filledPoints.forEach(p => {
+        const pidx = (p.y * width + p.x) * 4;
+        const r = colorHintData.data[pidx];
+        const g = colorHintData.data[pidx + 1];
+        const b = colorHintData.data[pidx + 2];
+        const a = colorHintData.data[pidx + 3];
+        
+        if (a === 0 || (r === 0 && g === 0 && b === 0)) return;
+        
+        const colorKey = `${r},${g},${b}`;
+        colorCount[colorKey] = (colorCount[colorKey] || 0) + 1;
+      });
+      
+      if (Object.keys(colorCount).length === 0) return;
+      
+      // 最も多い色を取得
+      let majorityColor = null;
+      let maxCount = 0;
+      for (const [colorKey, count] of Object.entries(colorCount)) {
+        if (count > maxCount) {
+          maxCount = count;
+          const [r, g, b] = colorKey.split(',').map(Number);
+          majorityColor = { r, g, b };
+        }
+      }
+      
+      // 背景透過指示色チェック（#87FF42 = rgb(135, 255, 66)）
+      const isTransparentColor = (r, g, b) => {
+        // #87FF42に近い色を透過色として判定（±10の範囲）
+        return Math.abs(r - 135) <= 10 && Math.abs(g - 255) <= 10 && Math.abs(b - 66) <= 10;
+      };
+      
+      // 透過色の場合は領域をクリア（完全に透明にする）
+      if (isTransparentColor(majorityColor.r, majorityColor.g, majorityColor.b)) {
+        console.log(`  透過指示色 rgb(${majorityColor.r},${majorityColor.g},${majorityColor.b}) を透明化`);
+        
+        // この領域を完全に透明にする（何も描画しない）
+        filledPoints.forEach(p => {
+          const sidx = p.y * width + p.x;
+          if (!barrier[sidx]) {
+            // resultCanvasには何も描画しない（透明のまま）
+            // 拡張処理も同様
+            for (let dy = -expandPixels; dy <= expandPixels; dy++) {
+              for (let dx = -expandPixels; dx <= expandPixels; dx++) {
+                const nx = p.x + dx;
+                const ny = p.y + dy;
+                if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
+                  const nidx = ny * width + nx;
+                  if (!barrier[nidx]) {
+                    // 何も描画しない（透明）
+                  }
+                }
+              }
+            }
+          }
+        });
+        
+        return;
+      }
+      
+      // 拡張処理を含めた塗りつぶし
+      filledPoints.forEach(p => {
+        const sidx = p.y * width + p.x;
+        if (!barrier[sidx]) {
+          resultCtx.fillStyle = `rgb(${majorityColor.r},${majorityColor.g},${majorityColor.b})`;
+          resultCtx.fillRect(p.x, p.y, 1, 1);
+          
+          // 拡張ピクセル
+          for (let dy = -expandPixels; dy <= expandPixels; dy++) {
+            for (let dx = -expandPixels; dx <= expandPixels; dx++) {
+              const nx = p.x + dx;
+              const ny = p.y + dy;
+              if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
+                const nidx = ny * width + nx;
+                if (!barrier[nidx]) {
+                  resultCtx.fillStyle = `rgb(${majorityColor.r},${majorityColor.g},${majorityColor.b})`;
+                  resultCtx.fillRect(nx, ny, 1, 1);
+                }
+              }
+            }
+          }
+        }
+      });
+    });
+    
+    colorIndex++;
+  });
+  
+  console.log('generateFill完了: 塗りつぶしポイント数=', totalFilledPoints);
+  
+  return resultCanvas;
+}
+
+function getLineSkeleton(lineArtCanvas, luminanceThreshold) {
+  const width = lineArtCanvas.width;
+  const height = lineArtCanvas.height;
+  const ctx = lineArtCanvas.getContext('2d', { willReadFrequently: true });
+  const imageData = ctx.getImageData(0, 0, width, height);
+  
+  console.log('getLineSkeleton: キャンバスサイズ', width, 'x', height);
+  
+  // 2値化
+  const binary = new Array(width * height).fill(false);
+  let darkPixels = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const r = imageData.data[idx];
+      const g = imageData.data[idx + 1];
+      const b = imageData.data[idx + 2];
+      const a = imageData.data[idx + 3];
+      
+      // 透明なピクセルは無視
+      if (a < 10) continue;
+      
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (luminance < luminanceThreshold) {
+        binary[y * width + x] = true;
+        darkPixels++;
+      }
+    }
+  }
+  
+  console.log('2値化完了: 暗いピクセル数=', darkPixels, '/', width * height);
+  
+  // Zhang-Suen細線化（簡易版）
+  const skeleton = zhangSuenThinning(binary, width, height);
+  
+  let skeletonPixels = 0;
+  for (let i = 0; i < skeleton.length; i++) {
+    if (skeleton[i]) skeletonPixels++;
+  }
+  
+  console.log('スケルトン化完了: スケルトンピクセル数=', skeletonPixels);
+  
+  return skeleton;
+}
+
+function zhangSuenThinning(binary, width, height) {
+  const result = [...binary];
+  let changed = true;
+  let iterations = 0;
+  const maxIterations = 100;
+  
+  while (changed && iterations < maxIterations) {
+    changed = false;
+    iterations++;
+    const toDelete = [];
+    
+    // サブイテレーション1
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (!result[idx]) continue;
+        if (shouldDelete1(result, x, y, width, height)) {
+          toDelete.push(idx);
+          changed = true;
+        }
+      }
+    }
+    
+    toDelete.forEach(idx => result[idx] = false);
+    toDelete.length = 0;
+    
+    // サブイテレーション2
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (!result[idx]) continue;
+        if (shouldDelete2(result, x, y, width, height)) {
+          toDelete.push(idx);
+          changed = true;
+        }
+      }
+    }
+    
+    toDelete.forEach(idx => result[idx] = false);
+  }
+  
+  return result;
+}
+
+function shouldDelete1(img, x, y, width, height) {
+  const p2 = y > 0 ? img[(y - 1) * width + x] : false;
+  const p3 = (x < width - 1 && y > 0) ? img[(y - 1) * width + (x + 1)] : false;
+  const p4 = x < width - 1 ? img[y * width + (x + 1)] : false;
+  const p5 = (x < width - 1 && y < height - 1) ? img[(y + 1) * width + (x + 1)] : false;
+  const p6 = y < height - 1 ? img[(y + 1) * width + x] : false;
+  const p7 = (x > 0 && y < height - 1) ? img[(y + 1) * width + (x - 1)] : false;
+  const p8 = x > 0 ? img[y * width + (x - 1)] : false;
+  const p9 = (x > 0 && y > 0) ? img[(y - 1) * width + (x - 1)] : false;
+  
+  const B = [p2, p3, p4, p5, p6, p7, p8, p9].filter(p => p).length;
+  
+  let A = 0;
+  if (!p2 && p3) A++;
+  if (!p3 && p4) A++;
+  if (!p4 && p5) A++;
+  if (!p5 && p6) A++;
+  if (!p6 && p7) A++;
+  if (!p7 && p8) A++;
+  if (!p8 && p9) A++;
+  if (!p9 && p2) A++;
+  
+  return (B >= 2 && B <= 6) && (A === 1) && (!p2 || !p4 || !p6) && (!p4 || !p6 || !p8);
+}
+
+function shouldDelete2(img, x, y, width, height) {
+  const p2 = y > 0 ? img[(y - 1) * width + x] : false;
+  const p3 = (x < width - 1 && y > 0) ? img[(y - 1) * width + (x + 1)] : false;
+  const p4 = x < width - 1 ? img[y * width + (x + 1)] : false;
+  const p5 = (x < width - 1 && y < height - 1) ? img[(y + 1) * width + (x + 1)] : false;
+  const p6 = y < height - 1 ? img[(y + 1) * width + x] : false;
+  const p7 = (x > 0 && y < height - 1) ? img[(y + 1) * width + (x - 1)] : false;
+  const p8 = x > 0 ? img[y * width + (x - 1)] : false;
+  const p9 = (x > 0 && y > 0) ? img[(y - 1) * width + (x - 1)] : false;
+  
+  const B = [p2, p3, p4, p5, p6, p7, p8, p9].filter(p => p).length;
+  
+  let A = 0;
+  if (!p2 && p3) A++;
+  if (!p3 && p4) A++;
+  if (!p4 && p5) A++;
+  if (!p5 && p6) A++;
+  if (!p6 && p7) A++;
+  if (!p7 && p8) A++;
+  if (!p8 && p9) A++;
+  if (!p9 && p2) A++;
+  
+  return (B >= 2 && B <= 6) && (A === 1) && (!p2 || !p4 || !p8) && (!p2 || !p6 || !p8);
+}
+
+function floodFillWithBarrier(barrier, visited, startX, startY, width, height) {
+  const queue = [{x: startX, y: startY}];
+  const filled = [];
+  
+  while (queue.length > 0) {
+    const {x, y} = queue.shift();
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    
+    const idx = y * width + x;
+    if (visited[idx]) continue;
+    if (barrier[idx]) continue; // バリア（線画）なら止まる
+    
+    visited[idx] = true;
+    filled.push({x, y});
+    
+    queue.push({x: x + 1, y});
+    queue.push({x: x - 1, y});
+    queue.push({x, y: y + 1});
+    queue.push({x, y: y - 1});
+  }
+  
+  return filled;
+}
+
+function isSkeletonBarrier(skeleton, colorHintData, x, y, width, height) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return true;
+  
+  const idx = y * width + x;
+  const isSkeleton = skeleton[idx];
+  
+  // スケルトン（細線化された線画）のみをバリアとして使用
+  // 色ヒントの黒は境界線として扱わない
+  return isSkeleton;
+}
+
+function getUniqueColors(imageData, width, height) {
+  const colorSet = new Set();
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const r = imageData.data[idx];
+      const g = imageData.data[idx + 1];
+      const b = imageData.data[idx + 2];
+      const a = imageData.data[idx + 3];
+      
+      if (a === 0 || (r === 0 && g === 0 && b === 0)) continue;
+      
+      colorSet.add(`${r},${g},${b}`);
+    }
+  }
+  
+  return Array.from(colorSet).map(colorStr => {
+    const [r, g, b] = colorStr.split(',').map(Number);
+    return {r, g, b};
+  });
+}
+
+function getPointsWithColor(imageData, width, height, color) {
+  const points = [];
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const r = imageData.data[idx];
+      const g = imageData.data[idx + 1];
+      const b = imageData.data[idx + 2];
+      
+      if (r === color.r && g === color.g && b === color.b) {
+        points.push({x, y});
+      }
+    }
+  }
+  
+  return points;
 }
 
 </script>
