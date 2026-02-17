@@ -2464,35 +2464,67 @@ function updateFrameGuide(){
   el.style.left=left+'px';el.style.top=top+'px';
   el.style.width=frameGuideW+'px';el.style.height=frameGuideH+'px';
 }
-function renderLayer(li,fi){
-  const ctx=layerCtxs[li];
-  const isDraft=LAYER_DEFS[li].type==='draft';
-  // 下書きレイヤーはCSS opacityで全描画（画像+ストローク）に不透明度適用
-  layerCanvases[li].style.opacity=isDraft?draftOpacity:1;
+function renderLayer(li, fi) {
+  const ctx = layerCtxs[li];
+  const isDraft = LAYER_DEFS[li].type === 'draft';
 
-  if(fi<0||fi>=CF()[li].frames.length){ctx.clearRect(0,0,S.cw,S.ch);return;}
-  const fr=getEffectiveFrame(li,fi);
-  if(!fr){ctx.clearRect(0,0,S.cw,S.ch);return;}
-
-  if(fr.draftImg){
-    const eidx=getEffectiveFrameIdx(li,fi);
-    const key=currentCut+'-'+li+'-'+eidx;
-    const drawWithImg=(img)=>{
-      ctx.clearRect(0,0,S.cw,S.ch);
-      ctx.drawImage(img,0,0,S.cw,S.ch);
-      drawStrokes(ctx,fr.strokes);if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
-    };
-    if(draftImgCache[key]&&draftImgCache[key].src===fr.draftImg){
-      drawWithImg(draftImgCache[key]);
-    }else{
-      const img=new Image();img.onload=()=>{
-        draftImgCache[key]=img;drawWithImg(img);
-      };img.src=fr.draftImg;
-    }
+  // フレーム範囲外ならクリアして終了
+  if (fi < 0 || fi >= CF()[li].frames.length) {
+    ctx.clearRect(0, 0, S.cw, S.ch);
     return;
   }
-  ctx.clearRect(0,0,S.cw,S.ch);
-  drawStrokes(ctx,fr.strokes);if(!isDraft)binarizeCanvas(ctx,S.cw,S.ch);
+
+  const fr = getEffectiveFrame(li, fi);
+  if (!fr) {
+    ctx.clearRect(0, 0, S.cw, S.ch);
+    return;
+  }
+
+  // キャンバスを一旦クリア
+  ctx.clearRect(0, 0, S.cw, S.ch);
+
+  // 下書き画像がある場合
+  if (fr.draftImg) {
+    const key = currentCut + '-' + li + '-' + getEffectiveFrameIdx(li, fi);
+    
+    const drawWithImg = (img) => {
+      // 下書き画像を描画
+      ctx.drawImage(img, 0, 0, S.cw, S.ch);
+      
+      // その上にストロークを描画
+      drawStrokes(ctx, fr.strokes);
+      
+      // ★★★ 重要：ここで二値化（アンチエイリアス除去） ★★★
+      // これにより、下書き画像の上に描いた線画も完全二値になる
+      binarizeCanvas(ctx, S.cw, S.ch);
+    };
+
+    // キャッシュがある場合は即描画
+    if (draftImgCache[key] && draftImgCache[key].src === fr.draftImg) {
+      drawWithImg(draftImgCache[key]);
+    } 
+    // キャッシュがない場合はロード
+    else {
+      const img = new Image();
+      img.onload = () => {
+        draftImgCache[key] = img;
+        drawWithImg(img);
+      };
+      img.src = fr.draftImg;
+    }
+  } 
+  // 下書き画像がない通常のレイヤー
+  else {
+    // ストロークを描画
+    drawStrokes(ctx, fr.strokes);
+    
+    // ★★★ 重要：ここで二値化（アンチエイリアス除去） ★★★
+    // これで画面表示も書き出しと同じ完全二値の線画になる
+    binarizeCanvas(ctx, S.cw, S.ch);
+  }
+
+  // 下書きレイヤーのみCSSで半透明にする
+  layerCanvases[li].style.opacity = isDraft ? draftOpacity : 1;
 }
 function drawStrokes(ctx,strokes){
   for(const s of strokes){
@@ -2510,14 +2542,26 @@ function drawStroke(ctx,s){
   else if(s.type==='fill_result'){if(s.imageData){ctx.putImageData(s.imageData,0,0);}}
 }
 // 二値化：アルファ値を閾値で0か255に変換（アンチエイリアス除去）
-function binarizeCanvas(ctx,w,h){
-  const imgData=ctx.getImageData(0,0,w,h);
-  const d=imgData.data;
-  const threshold=128;
-  for(let i=3;i<d.length;i+=4){
-    d[i]=d[i]>=threshold?255:0;
+function binarizeCanvas(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+
+  // 閾値（調整可能：80〜140くらいがおすすめ）
+  const threshold = 100;   // ← これを調整すると線の残り具合が変わる
+
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3];
+
+    if (a < threshold) {
+      // 薄い部分（アンチエイリアス）は完全透明に
+      d[i + 3] = 0;
+    } else {
+      // それ以外は完全不透明に（色はそのまま）
+      d[i + 3] = 255;
+    }
   }
-  ctx.putImageData(imgData,0,0);
+
+  ctx.putImageData(imgData, 0, 0);
 }
 function renderStrokePreview(){
   const ctx=layerCtxs[S.layer];
