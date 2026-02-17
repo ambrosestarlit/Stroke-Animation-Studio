@@ -4556,22 +4556,105 @@ function applyEase(t,ty){switch(ty){case'easeIn':return t*t;case'easeOut':return
 // ===========================================================
 // Undo/Redo
 // ===========================================================
-function pushUndo(){undoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});if(undoStack.length>MAX_UNDO)undoStack.shift();redoStack=[];}
-function undoAction(){if(!undoStack.length)return;redoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});const s=undoStack.pop();cuts=s.cuts;currentCut=s.cc;S.frame=s.f;S.layer=s.li;updateCutList();updateLayerList();updateTimeline();renderAll();}
-function redoAction(){if(!redoStack.length)return;undoStack.push({cuts:JSON.parse(JSON.stringify(cuts)),cc:currentCut,f:S.frame,li:S.layer});const s=redoStack.pop();cuts=s.cuts;currentCut=s.cc;S.frame=s.f;S.layer=s.li;updateCutList();updateLayerList();updateTimeline();renderAll();}
+// 下塗り画像を除外してディープコピーする関数
+function deepCopyWithoutDraftImg(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(item => deepCopyWithoutDraftImg(item));
+  
+  const copy = {};
+  for (const key in obj) {
+    if (key === 'draftImg') {
+      copy[key] = obj[key];  // 参照のみ
+    } else {
+      copy[key] = deepCopyWithoutDraftImg(obj[key]);
+    }
+  }
+  return copy;
+}
+
+function pushUndo(){
+  try {
+    const cutsCopy = deepCopyWithoutDraftImg(cuts);
+    undoStack.push({cuts: cutsCopy, cc: currentCut, f: S.frame, li: S.layer});
+    if(undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = [];
+  } catch (err) {
+    console.error('Undo保存エラー:', err);
+  }
+}
+
+function undoAction(){
+  if(!undoStack.length) return;
+  try {
+    const cutsCopy = deepCopyWithoutDraftImg(cuts);
+    redoStack.push({cuts: cutsCopy, cc: currentCut, f: S.frame, li: S.layer});
+    const s = undoStack.pop();
+    cuts = s.cuts;
+    currentCut = s.cc;
+    S.frame = s.f;
+    S.layer = s.li;
+    updateCutList();
+    updateLayerList();
+    updateTimeline();
+    renderAll();
+  } catch (err) {
+    console.error('Undo実行エラー:', err);
+    notify('Undoに失敗しました');
+  }
+}
+
+function redoAction(){
+  if(!redoStack.length) return;
+  try {
+    const cutsCopy = deepCopyWithoutDraftImg(cuts);
+    undoStack.push({cuts: cutsCopy, cc: currentCut, f: S.frame, li: S.layer});
+    const s = redoStack.pop();
+    cuts = s.cuts;
+    currentCut = s.cc;
+    S.frame = s.f;
+    S.layer = s.li;
+    updateCutList();
+    updateLayerList();
+    updateTimeline();
+    renderAll();
+  } catch (err) {
+    console.error('Redo実行エラー:', err);
+    notify('Redoに失敗しました');
+  }
+}
+
 
 // ===========================================================
 // 保存/読込
 // ===========================================================
 function getProjectName(){return document.getElementById('project-name-input').value.trim()||'untitled';}
+
 function saveProject(){
   const pn=getProjectName();
-  const p={version:2,appName:'StrokeAnimationStudio',projectName:pn,cw:S.cw,ch:S.ch,fps:S.fps,cuts,currentCut,frame:S.frame,layer:S.layer,layerVis,onionLayerVis,
+  const p={
+    version:2,
+    appName:'StrokeAnimationStudio',
+    projectName:pn,
+    cw:S.cw,
+    ch:S.ch,
+    fps:S.fps,
+    cuts,
+    currentCut,
+    frame:S.frame,
+    layer:S.layer,
+    layerVis,
+    onionLayerVis,
     frameGuide:{w:frameGuideW,h:frameGuideH,enabled:document.getElementById('frame-guide-enabled').checked},
     popupImages:project.popupImages||[],
-  audio: audioState  };
+    audio: audioState
+  };
   const b=new Blob([JSON.stringify(p)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=pn+'.sasp';a.click();URL.revokeObjectURL(a.href);notify('保存: '+pn+'.sasp');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download=pn+'.sasp';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  notify('保存: '+pn+'.sasp');
 }
 function loadProject(){document.getElementById('file-input-project').click();}
 function handleLoadProject(e){
@@ -4580,11 +4663,24 @@ function handleLoadProject(e){
   const rd = new FileReader();
   rd.onload = async ev => {
     try {
-      const p = JSON.parse(ev.target.result);if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
-    S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
-    if(p.version>=2){cuts=p.cuts;currentCut=p.currentCut||0;}else{cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];currentCut=0;}
-    S.frame=p.frame||0;S.layer=p.layer||0;layerVis=p.layerVis||{};
-    // 音声データの読み込み
+      const p = JSON.parse(ev.target.result);
+      if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
+      
+      S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
+      
+      if(p.version>=2){
+        cuts=p.cuts;
+        currentCut=p.currentCut||0;
+      }else{
+        cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];
+        currentCut=0;
+      }
+      
+      S.frame=p.frame||0;
+      S.layer=p.layer||0;
+      layerVis=p.layerVis||{};
+      
+      // 音声データの読み込み
       if (p.audio) {
         audioState = p.audio;
         if (audioState.file) {
@@ -4592,26 +4688,46 @@ function handleLoadProject(e){
           updateAudioInfo();
         }
       }
-    // オニオンレイヤー表示設定の読み込み
-    if(p.onionLayerVis){onionLayerVis=p.onionLayerVis;}else{for(let i=0;i<LAYER_DEFS.length;i++)onionLayerVis[i]=true;}
-    if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
-    document.getElementById('fps-input').value=S.fps;document.getElementById('info-width').value=S.cw;document.getElementById('info-height').value=S.ch;
-    if(p.frameGuide){
-      frameGuideW=p.frameGuide.w||1920;frameGuideH=p.frameGuide.h||1080;
-      document.getElementById('frame-guide-w').value=frameGuideW;
-      document.getElementById('frame-guide-h').value=frameGuideH;
-      document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
-    }
-    // ★ popupImagesの読み込み
-    if(p.popupImages){
-      project.popupImages=p.popupImages;
-      // localStorageにも同期
-      const key=`project:${currentProjectId}:images`;
-      localStorage.setItem(key,JSON.stringify(p.popupImages));
-    }
-    draftImgCache={};createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
-    renderAll();undoStack=[];redoStack=[];notify('読み込みました');
-  } catch (err) {
+      
+      // オニオンレイヤー表示設定の読み込み
+      if(p.onionLayerVis){
+        onionLayerVis=p.onionLayerVis;
+      }else{
+        for(let i=0;i<LAYER_DEFS.length;i++)onionLayerVis[i]=true;
+      }
+      
+      if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
+      document.getElementById('fps-input').value=S.fps;
+      document.getElementById('info-width').value=S.cw;
+      document.getElementById('info-height').value=S.ch;
+      
+      if(p.frameGuide){
+        frameGuideW=p.frameGuide.w||1920;
+        frameGuideH=p.frameGuide.h||1080;
+        document.getElementById('frame-guide-w').value=frameGuideW;
+        document.getElementById('frame-guide-h').value=frameGuideH;
+        document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
+      }
+      
+      // popupImagesの読み込み
+      if(p.popupImages){
+        project.popupImages=p.popupImages;
+        const key=`project:${currentProjectId}:images`;
+        localStorage.setItem(key,JSON.stringify(p.popupImages));
+      }
+      
+      draftImgCache={};
+      createCanvases();
+      centerCanvas();
+      updateCutList();
+      updateLayerList();
+      updateTimeline();
+      renderAll();
+      undoStack=[];
+      redoStack=[];
+      notify('読み込みました');
+      
+    } catch (err) {
       notify('エラー: ' + err.message);
     }
   };
@@ -5848,30 +5964,24 @@ function executeAutoFill(fillLayerIndex) {
 
     finalCtx.putImageData(finalImgData, 0, 0);
 
-    // ★★★★★ ここが新しく追加：下塗りレイヤーのベクター線画をすべて削除 ★★★★★
-    // fill_result を追加する前に、元のベクター系ストロークを全除去
-    const vectorTypes = ['bezier', 'line', 'ellipse', 'rect', 'polyline', 'polygon']; // 必要に応じて追加
-    fillFrame.strokes = fillFrame.strokes.filter(stroke => {
-      if (vectorTypes.includes(stroke.type)) {
-        console.log(`フレーム ${frameIdx + 1}: ベクター線画削除 (${stroke.type})`);
-        return false;
-      }
-      return true;
-    });
-
-    // 5. クリア済み結果を最下層に追加
-    const finalStroke = {
-      type: 'fill_result',
-      imageData: finalCtx.getImageData(0, 0, S.cw, S.ch)
-    };
-
-    fillFrame.strokes.unshift(finalStroke);
+    // ★★★ 重要：ベクターストロークを完全削除してラスタライズ ★★★
+    // すべてのストロークを削除（ベクターデータを排除）
+    fillFrame.strokes = [];
+    
+    // Canvas画像をData URLとしてdraftImgに保存
+    fillFrame.draftImg = resultCanvas.toDataURL('image/png');
+    
+    console.log(`フレーム ${frameIdx + 1}: ラスタライズ完了（ベクターデータ削除）`);
+    
     processedCount++;
   }
 
+  // キャッシュをクリア
+  draftImgCache = {};
+  
   closeAutoFillDialog();
   renderAll();
-  notify(`自動下塗り完了 (${processedCount}フレーム) - ベクター線画はすべて削除済み`);
+  notify(`自動下塗り完了 (${processedCount}フレーム) - ラスタライズ済み`);
 }
 
 function closeAutoFillDialog() {
@@ -6192,10 +6302,14 @@ function floodFillWithBarrier(barrier, visited, startX, startY, width, height) {
     
     const idx = y * width + x;
     if (visited[idx]) continue;
-    if (barrier[idx]) continue; // バリア（線画）なら止まる
     
     visited[idx] = true;
+    
+    // ★修正：線画部分（barrier）も塗りつぶし対象に含めるが、拡散は止める
     filled.push({x, y});
+    
+    // バリア（線画）なら、ここで塗りつぶしの拡散を止める
+    if (barrier[idx]) continue;
     
     queue.push({x: x + 1, y});
     queue.push({x: x - 1, y});
@@ -6265,5 +6379,6 @@ function getPointsWithColor(imageData, width, height, color) {
 <input type="color" id="layer-color-picker" style="display:none;" value="#000000">
 
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5.5.2/dist/iro.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
