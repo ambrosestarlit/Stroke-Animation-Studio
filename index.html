@@ -634,18 +634,63 @@ body{font-family:'Segoe UI','Meiryo',sans-serif;background:var(--bg-primary);col
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(233,69,96,0.3);
 }
+
+/* =====================================================
+   ウェルカム画面
+   ===================================================== */
+#welcome-screen{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:var(--bg-primary);z-index:2000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+#welcome-screen.hidden{display:none;}
+.welcome-logo{font-size:32px;font-weight:700;color:var(--accent);margin-bottom:6px;letter-spacing:2px;}
+.welcome-sub{font-size:13px;color:var(--text-secondary);margin-bottom:40px;}
+.welcome-actions{display:flex;gap:12px;margin-bottom:40px;}
+.welcome-btn{padding:12px 28px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;}
+.welcome-btn.primary{background:var(--accent);color:#fff;}
+.welcome-btn.primary:hover{background:var(--accent-hover);}
+.welcome-btn.secondary{background:var(--bg-panel);color:var(--text-primary);border:1px solid var(--border-light);}
+.welcome-btn.secondary:hover{background:var(--bg-tertiary);}
+.welcome-projects{width:600px;max-width:90vw;}
+.welcome-projects h3{font-size:13px;color:var(--text-secondary);margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+.project-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;}
+.project-item{display:flex;align-items:center;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:10px 14px;cursor:pointer;gap:12px;transition:border-color .15s;}
+.project-item:hover{border-color:var(--accent);}
+.project-item-thumb{width:60px;height:40px;background:var(--bg-input);border-radius:3px;object-fit:contain;flex-shrink:0;}
+.project-item-info{flex:1;min-width:0;}
+.project-item-name{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.project-item-date{font-size:11px;color:var(--text-secondary);margin-top:2px;}
+.project-item-meta{font-size:11px;color:var(--text-muted);}
+.project-item-del{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px;border-radius:3px;flex-shrink:0;}
+.project-item-del:hover{color:var(--accent);background:var(--bg-input);}
+.welcome-empty{text-align:center;color:var(--text-muted);font-size:13px;padding:30px;}
 </style>
 
 </head>
 <body>
+<div id="welcome-screen">
+  <div class="welcome-logo">✦ Stroke Animation Studio</div>
+  <div class="welcome-sub">アニメーション制作ツール</div>
+  <div class="welcome-actions">
+    <button class="welcome-btn primary" onclick="startNewProject()">＋ 新規プロジェクト</button>
+    <button class="welcome-btn secondary" onclick="loadProject()">📂 ファイルから開く</button>
+  </div>
+  <div class="welcome-projects">
+    <h3>📁 保存済みプロジェクト</h3>
+    <div class="project-list" id="project-list"></div>
+  </div>
+</div>
 <div id="header">
   <span class="app-title">✦ Stroke Animation Studio</span>
   <input type="text" id="project-name-input" placeholder="プロジェクト名" value="untitled">
   <div class="header-sep"></div>
   <span class="tl-info">カット: <span id="current-cut-display">C_001</span></span>
+  <button class="header-btn" onclick="showWelcomeScreen()">🏠 ホーム</button>
   <button class="header-btn" onclick="newProject()">新規</button>
-  <button class="header-btn" onclick="saveProject()">💾 保存</button>
-  <button class="header-btn" onclick="loadProject()">📂 開く</button>
+  <button class="header-btn" onclick="saveToStorage()">💾 保存</button>
+  <button class="header-btn" onclick="exportProject()">📤 エクスポート</button>
+  <button class="header-btn" onclick="loadProject()">📂 インポート</button>
   <div class="header-sep"></div>
   <button class="header-btn" onclick="showCanvasSizeDialog()">キャンバスサイズ</button>
   <button class="header-btn" onclick="importDraftImage()">下書き読込</button>
@@ -1726,12 +1771,12 @@ function onKeyDown(e){
   // 入力フィールドにフォーカスがある場合、Ctrl+S/C/Vのみ通常動作を許可（テキスト編集用）
   if(isInputFocused){
     // Ctrl+Sは保存を優先
-    if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
+    if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveToStorage();}
     return; // その他のショートカットは入力フィールドのデフォルト動作に任せる
   }
   
   // 以下は入力フィールド外でのみ動作
-  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveToStorage();}
   if((e.ctrlKey||e.metaKey)&&e.key==='c'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxCopyFrame();}
   if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){ctxLayer=S.layer;ctxFrame=S.frame;ctxPasteFrame();}
   if(!e.ctrlKey&&!e.metaKey){if(e.key==='p')selectTool('pen');if(e.key==='l')selectTool('line');if(e.key==='c')selectTool('circle');if(e.key==='r')selectTool('rect');if(e.key==='e')selectTool('eraser');if(e.key==='a')selectTool('point');if(e.key==='s')selectTool('stroke');if(e.key==='v')selectTool('move');}
@@ -4629,6 +4674,233 @@ function redoAction(){
 // ===========================================================
 function getProjectName(){return document.getElementById('project-name-input').value.trim()||'untitled';}
 
+
+// ===========================================================
+// ブラウザストレージ (localStorage) によるプロジェクト管理
+// ===========================================================
+const STORAGE_PREFIX = 'sas_project_';
+const STORAGE_INDEX  = 'sas_project_index';
+
+function getStorageIndex() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_INDEX) || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveStorageIndex(idx) {
+  localStorage.setItem(STORAGE_INDEX, JSON.stringify(idx));
+}
+
+function getProjectId() {
+  // 現在のプロジェクトIDがなければ新規生成
+  if (!window._currentStorageId) {
+    window._currentStorageId = 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  }
+  return window._currentStorageId;
+}
+
+function buildProjectData() {
+  const pn = getProjectName();
+  return {
+    version: 2,
+    appName: 'StrokeAnimationStudio',
+    projectName: pn,
+    cw: S.cw, ch: S.ch, fps: S.fps,
+    cuts, currentCut,
+    frame: S.frame, layer: S.layer,
+    layerVis, onionLayerVis,
+    frameGuide: {
+      w: frameGuideW, h: frameGuideH,
+      enabled: document.getElementById('frame-guide-enabled').checked
+    },
+    popupImages: project.popupImages || [],
+    audio: audioState
+  };
+}
+
+// サムネイル生成（最初の描画レイヤーをキャプチャ）
+function generateThumbnail() {
+  try {
+    const cvs = document.createElement('canvas');
+    cvs.width = 120; cvs.height = 80;
+    const ctx = cvs.getContext('2d');
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, 120, 80);
+    // 実際のキャンバスを縮小してサムネイル化
+    const mainCvs = document.getElementById('canvas-layer-0');
+    if (mainCvs) {
+      ctx.drawImage(mainCvs, 0, 0, 120, 80);
+    }
+    return cvs.toDataURL('image/jpeg', 0.5);
+  } catch(e) { return ''; }
+}
+
+function saveToStorage() {
+  try {
+    const pn    = getProjectName();
+    const id    = getProjectId();
+    const data  = buildProjectData();
+    const thumb = generateThumbnail();
+    const now   = new Date().toISOString();
+
+    // プロジェクト本体を保存（大きい場合は分割しない—5MBまで）
+    const json = JSON.stringify(data);
+    localStorage.setItem(STORAGE_PREFIX + id, json);
+
+    // インデックス更新
+    let idx = getStorageIndex();
+    const existing = idx.findIndex(p => p.id === id);
+    const entry = { id, name: pn, savedAt: now, thumbnail: thumb,
+                    size: json.length };
+    if (existing >= 0) idx[existing] = entry;
+    else idx.unshift(entry);
+    saveStorageIndex(idx);
+
+    notify('ブラウザに保存しました: ' + pn);
+  } catch(e) {
+    if (e.name === 'QuotaExceededError') {
+      notify('⚠ ストレージ容量不足。古いプロジェクトを削除してください。');
+    } else {
+      notify('保存エラー: ' + e.message);
+    }
+  }
+}
+
+function loadFromStorage(id) {
+  try {
+    const json = localStorage.getItem(STORAGE_PREFIX + id);
+    if (!json) { notify('プロジェクトが見つかりません'); return; }
+    const p = JSON.parse(json);
+    applyLoadedProject(p);
+    window._currentStorageId = id;
+    hideWelcomeScreen();
+    notify('読み込みました: ' + (p.projectName || 'untitled'));
+  } catch(e) {
+    notify('読み込みエラー: ' + e.message);
+  }
+}
+
+function deleteFromStorage(id, e) {
+  e.stopPropagation();
+  const idx = getStorageIndex();
+  const entry = idx.find(p => p.id === id);
+  if (!confirm('「' + (entry ? entry.name : id) + '」を削除しますか？')) return;
+  localStorage.removeItem(STORAGE_PREFIX + id);
+  saveStorageIndex(idx.filter(p => p.id !== id));
+  renderProjectList();
+}
+
+function renderProjectList() {
+  const list = document.getElementById('project-list');
+  if (!list) return;
+  const idx = getStorageIndex();
+  if (idx.length === 0) {
+    list.innerHTML = '<div class="welcome-empty">保存済みプロジェクトはありません</div>';
+    return;
+  }
+  list.innerHTML = idx.map(p => {
+    const d = new Date(p.savedAt);
+    const dateStr = d.toLocaleDateString('ja-JP') + ' ' + d.toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit'});
+    const kb = Math.round(p.size / 1024);
+    const thumb = p.thumbnail
+      ? `<img class="project-item-thumb" src="${p.thumbnail}" alt="">`
+      : `<div class="project-item-thumb"></div>`;
+    return `<div class="project-item" onclick="loadFromStorage('${p.id}')">
+      ${thumb}
+      <div class="project-item-info">
+        <div class="project-item-name">${escHtml(p.name)}</div>
+        <div class="project-item-date">${dateStr}</div>
+        <div class="project-item-meta">${kb} KB</div>
+      </div>
+      <button class="project-item-del" onclick="deleteFromStorage('${p.id}',event)" title="削除">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showWelcomeScreen() {
+  renderProjectList();
+  document.getElementById('welcome-screen').classList.remove('hidden');
+}
+
+function hideWelcomeScreen() {
+  document.getElementById('welcome-screen').classList.add('hidden');
+}
+
+function startNewProject() {
+  hideWelcomeScreen();
+  // 新しいプロジェクトIDを発行してから新規作成
+  window._currentStorageId = null;
+  newProjectSilent();
+}
+
+function newProjectSilent() {
+  S.cw=2600;S.ch=1500;S.fps=24;S.frame=0;S.layer=0;
+  cuts=[createEmptyCut('C_001',24)];currentCut=0;
+  for(let i=0;i<LAYER_DEFS.length;i++){layerVis[i]=true;onionLayerVis[i]=true;}
+  undoStack=[];redoStack=[];draftImgCache={};
+  document.getElementById('project-name-input').value='untitled';
+  document.getElementById('fps-input').value=S.fps;
+  document.getElementById('info-width').value=S.cw;
+  document.getElementById('info-height').value=S.ch;
+  frameGuideW=1920;frameGuideH=1080;
+  document.getElementById('frame-guide-w').value=1920;
+  document.getElementById('frame-guide-h').value=1080;
+  document.getElementById('frame-guide-enabled').checked=true;
+  createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
+  renderAll();notify('新規作成');
+}
+
+// 既存のloadProject（ファイル）はそのまま、読み込み後にIDをリセット
+function applyLoadedProject(p) {
+  if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
+  S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
+  if(p.version>=2){
+    cuts=p.cuts;currentCut=p.currentCut||0;
+  }else{
+    cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];
+    currentCut=0;
+  }
+  S.frame=p.frame||0;S.layer=p.layer||0;
+  layerVis=p.layerVis||{};
+  if(p.audio){audioState=p.audio;if(audioState.file){initAudioContext();updateAudioInfo();}}
+  if(p.onionLayerVis){onionLayerVis=p.onionLayerVis;}
+  else{for(let i=0;i<LAYER_DEFS.length;i++)onionLayerVis[i]=true;}
+  if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
+  document.getElementById('fps-input').value=S.fps;
+  document.getElementById('info-width').value=S.cw;
+  document.getElementById('info-height').value=S.ch;
+  if(p.frameGuide){
+    frameGuideW=p.frameGuide.w||1920;frameGuideH=p.frameGuide.h||1080;
+    document.getElementById('frame-guide-w').value=frameGuideW;
+    document.getElementById('frame-guide-h').value=frameGuideH;
+    document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
+  }
+  if(p.popupImages){
+    project.popupImages=p.popupImages;
+    const key=`project:${currentProjectId}:images`;
+    localStorage.setItem(key,JSON.stringify(p.popupImages));
+  }
+  draftImgCache={};
+  createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
+  renderAll();undoStack=[];redoStack=[];
+}
+
+// エクスポート（旧saveProject）
+function exportProject(){
+  const pn=getProjectName();
+  const p=buildProjectData();
+  const b=new Blob([JSON.stringify(p)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download=pn+'.sasp';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  notify('エクスポート: '+pn+'.sasp');
+}
+
 function saveProject(){
   const pn=getProjectName();
   const p={
@@ -4664,69 +4936,11 @@ function handleLoadProject(e){
   rd.onload = async ev => {
     try {
       const p = JSON.parse(ev.target.result);
-      if(p.appName!=='StrokeAnimationStudio'){notify('不正なファイル');return;}
-      
-      S.cw=p.cw;S.ch=p.ch;S.fps=p.fps;
-      
-      if(p.version>=2){
-        cuts=p.cuts;
-        currentCut=p.currentCut||0;
-      }else{
-        cuts=[{name:'C_001',totalFrames:p.totalFrames,frameDur:p.frameDur||{},layers:p.layers}];
-        currentCut=0;
-      }
-      
-      S.frame=p.frame||0;
-      S.layer=p.layer||0;
-      layerVis=p.layerVis||{};
-      
-      // 音声データの読み込み
-      if (p.audio) {
-        audioState = p.audio;
-        if (audioState.file) {
-          await initAudioContext();
-          updateAudioInfo();
-        }
-      }
-      
-      // オニオンレイヤー表示設定の読み込み
-      if(p.onionLayerVis){
-        onionLayerVis=p.onionLayerVis;
-      }else{
-        for(let i=0;i<LAYER_DEFS.length;i++)onionLayerVis[i]=true;
-      }
-      
-      if(p.projectName)document.getElementById('project-name-input').value=p.projectName;
-      document.getElementById('fps-input').value=S.fps;
-      document.getElementById('info-width').value=S.cw;
-      document.getElementById('info-height').value=S.ch;
-      
-      if(p.frameGuide){
-        frameGuideW=p.frameGuide.w||1920;
-        frameGuideH=p.frameGuide.h||1080;
-        document.getElementById('frame-guide-w').value=frameGuideW;
-        document.getElementById('frame-guide-h').value=frameGuideH;
-        document.getElementById('frame-guide-enabled').checked=!!p.frameGuide.enabled;
-      }
-      
-      // popupImagesの読み込み
-      if(p.popupImages){
-        project.popupImages=p.popupImages;
-        const key=`project:${currentProjectId}:images`;
-        localStorage.setItem(key,JSON.stringify(p.popupImages));
-      }
-      
-      draftImgCache={};
-      createCanvases();
-      centerCanvas();
-      updateCutList();
-      updateLayerList();
-      updateTimeline();
-      renderAll();
-      undoStack=[];
-      redoStack=[];
-      notify('読み込みました');
-      
+      applyLoadedProject(p);
+      // ファイルから読み込んだ場合は新しいストレージIDを発行
+      window._currentStorageId = null;
+      hideWelcomeScreen();
+      notify('インポートしました: ' + (p.projectName || 'untitled'));
     } catch (err) {
       notify('エラー: ' + err.message);
     }
@@ -4740,16 +4954,8 @@ function handleLoadProject(e){
 // ===========================================================
 function newProject(){
   if(!confirm('現在の作業を破棄して新規作成しますか？'))return;
-  S.cw=2600;S.ch=1500;S.fps=24;S.frame=0;S.layer=0;cuts=[createEmptyCut('C_001',24)];currentCut=0;
-  for(let i=0;i<LAYER_DEFS.length;i++){layerVis[i]=true;onionLayerVis[i]=true;}
-  undoStack=[];redoStack=[];draftImgCache={};
-  document.getElementById('project-name-input').value='untitled';document.getElementById('fps-input').value=S.fps;
-  document.getElementById('info-width').value=S.cw;document.getElementById('info-height').value=S.ch;
-  frameGuideW=1920;frameGuideH=1080;
-  document.getElementById('frame-guide-w').value=1920;document.getElementById('frame-guide-h').value=1080;
-  document.getElementById('frame-guide-enabled').checked=true;
-  createCanvases();centerCanvas();updateCutList();updateLayerList();updateTimeline();
-  renderAll();notify('新規作成');
+  window._currentStorageId = null;
+  newProjectSilent();
 }
 function showCanvasSizeDialog(){document.getElementById('canvas-w-input').value=S.cw;document.getElementById('canvas-h-input').value=S.ch;document.getElementById('canvas-size-modal').classList.add('show');}
 function applyCanvasSize(){const w=+document.getElementById('canvas-w-input').value,h=+document.getElementById('canvas-h-input').value;if(w<1||h<1||w>8192||h>8192){notify('サイズが不正');return;}pushUndo();S.cw=w;S.ch=h;document.getElementById('info-width').value=w;document.getElementById('info-height').value=h;createCanvases();centerCanvas();renderAll();closeModal('canvas-size-modal');notify(`キャンバス: ${w}×${h}`);}
@@ -5009,6 +5215,19 @@ document.getElementById('pen-color').addEventListener('input', e => {
 
 // init() の最後に呼び出し
 initColorPalette();
+
+// ページ読み込み時にウェルカム画面を表示
+(function initWelcome() {
+  const idx = getStorageIndex();
+  // 保存プロジェクトがあればウェルカム画面、なければそのまま作業画面へ
+  if (idx.length > 0) {
+    renderProjectList();
+    // welcome-screen はデフォルトで表示されているのでそのまま
+  } else {
+    // 初回起動: ウェルカム画面を表示（ボタンで新規作成を促す）
+    renderProjectList();
+  }
+})();
 
 // JavaScript部分の追加 (連番読み込み関数を追加)
 
